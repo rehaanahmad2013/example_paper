@@ -1,0 +1,243 @@
+(Loading /opt/lib/perl5/LaTeXML/Package/TeX.pool.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/eTeX.pool.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/pdfTeX.pool.ltxml... 0.00 sec) 0.08 sec)
+latexmlc (LaTeXML version 0.8.7)
+invoked as [../latexmlc --source=example_paper.tex --dest=omgitworks.html]
+processing started Thu Dec 28 14:55:46 2023
+(Digesting TeX example_paper...
+(Processing content /opt/test/example_paper.tex...
+(Loading /opt/lib/perl5/LaTeXML/Package/LaTeX.pool.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/textcomp.sty.ltxml... 0.00 sec) 0.12 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/article.cls.ltxml... 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/microtype.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/graphicx.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/graphics.sty.ltxml... 0.00 sec) 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/subfigure.sty.ltxml... 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/booktabs.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/enumitem.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/hyperref.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/ltxcmds.sty.ltxml...
+Warning:missing_file:ltxcmds Can't find package ltxcmds
+	at ltxcmds.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	search paths are /opt/test, /opt/test
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/ltxcmds.sty.ltxml; line 20
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/keyval.sty.ltxml...
+Warning:missing_file:keyval Can't find package keyval
+	at keyval.sty.ltxml; line 19
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/keyval.sty.ltxml; line 19
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/kvsetkeys.sty.ltxml...
+Warning:missing_file:kvsetkeys Can't find package kvsetkeys
+	at kvsetkeys.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/kvsetkeys.sty.ltxml; line 20
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/kvdefinekeys.sty.ltxml...
+Warning:missing_file:kvdefinekeys Can't find package kvdefinekeys
+	at kvdefinekeys.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/kvdefinekeys.sty.ltxml; line 20
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/kvoptions.sty.ltxml...
+Warning:missing_file:kvoptions Can't find package kvoptions
+	at kvoptions.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/kvoptions.sty.ltxml; line 20
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/nameref.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/refcount.sty.ltxml...
+Warning:missing_file:refcount Can't find package refcount
+	at refcount.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/refcount.sty.ltxml; line 20
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/gettitlestring.sty.ltxml...
+Warning:missing_file:gettitlestring Can't find package gettitlestring
+	at gettitlestring.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/gettitlestring.sty.ltxml; line 20
+ 0.00 sec) 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/url.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/bitset.sty.ltxml...
+Warning:missing_file:bitset Can't find package bitset
+	at bitset.sty.ltxml; line 20
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/bitset.sty.ltxml; line 20
+ 0.00 sec) 0.06 sec)
+Info:fallback:icml2022.sty Interpreted 2022 as a versioned package/class name, falling back to generic icml.sty
+	at example_paper.tex; line 16 col 0 - line 16 col 1
+(Loading /opt/lib/perl5/LaTeXML/Package/icml.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/icml_support.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/times.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/fancyhdr.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/color.sty.ltxml... 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/algorithm.sty.ltxml...
+(Processing definitions /opt/test/algorithm.sty...
+Document Style `algorithm' - floating environment
+(Loading /opt/lib/perl5/LaTeXML/Package/float.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/ifthen.sty.ltxml...
+Warning:missing_file:ifthen Can't find package ifthen
+	at ifthen.sty.ltxml; line 27
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/ifthen.sty.ltxml; line 27
+ 0.00 sec)
+Error:undefined:\newboolean The token T_CS[\newboolean] is not defined.
+	at algorithm.sty; line 12 col 11 - line 12 col 11
+	Defining it now as <ltx:ERROR/>
+	Next token is T_BEGIN[{] ( == T_BEGIN[{])
+	In Core::Gullet[@0x45c5988] /opt/test/algorithm.sty; from line 12 col 12 to line 12 col 12
+	 <= Core::Definition::Constructor[\usepac... <= Core::Stomach[@0x45d4938] <= ...
+Error:undefined:\setboolean The token T_CS[\setboolean] is not defined.
+	at algorithm.sty; line 13 col 11 - line 13 col 11
+	Defining it now as <ltx:ERROR/>
+	Next token is T_BEGIN[{] ( == T_BEGIN[{])
+	In Core::Gullet[@0x45c5988] /opt/test/algorithm.sty; from line 13 col 12 to line 13 col 12
+	 <= Core::Definition::Constructor[\usepac... <= Core::Stomach[@0x45d4938] <= ...
+Error:undefined:\ifthenelse The token T_CS[\ifthenelse] is not defined.
+	at algorithm.sty; line 60 col 11 - line 60 col 11
+	Defining it now as with \newif
+	Next token is T_BEGIN[{] ( == T_BEGIN[{])
+	In Core::Gullet[@0x45c5988] /opt/test/algorithm.sty; from line 60 col 12 to line 60 col 12
+	 <= Core::Definition::Constructor[\usepac... <= Core::Stomach[@0x45d4938] <= ...
+Error:expected:\fi Missing \fi or \else, conditional fell off end
+	at algorithm.sty; line 80 col 0 - line 80 col 0
+	Conditional started at algorithm.sty; line 60 col 12 - line 60 col 12
+	Input is empty
+	In Core::Definition::Conditional[\iffalse] /opt/lib/perl5/LaTeXML/Package/TeX.pool.ltxml; line 832
+	 <= Core::Stomach[@0x45d4938] <= Core::Gullet[@0x45c5988] <= Core::Definition::Constructor[\usepac... <= ...
+ 0.02 sec) 0.02 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/algorithmic.sty.ltxml...
+(Processing definitions /opt/test/algorithmic.sty...
+Document Style `algorithmic' - environment
+(Loading /opt/lib/perl5/LaTeXML/Package/calc.sty.ltxml... 0.00 sec) 0.03 sec) 0.03 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/natbib.sty.ltxml... 0.01 sec) 0.09 sec) 0.09 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/amsmath.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/amsbsy.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/amsgen.sty.ltxml... 0.00 sec) 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/amstext.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/amsopn.sty.ltxml... 0.00 sec) 0.03 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/amssymb.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/amsfonts.sty.ltxml... 0.00 sec) 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/mathtools.sty.ltxml... 0.02 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/amsthm.sty.ltxml... 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/cleveref.sty.ltxml...
+Warning:missing_file:cleveref Can't find package cleveref
+	at cleveref.sty.ltxml; line 26
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/cleveref.sty.ltxml; line 26
+ 0.00 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/todonotes.sty.ltxml...
+(Loading /opt/lib/perl5/LaTeXML/Package/xkeyval.sty.ltxml... 0.01 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/xcolor.sty.ltxml... 0.03 sec)
+(Loading /opt/lib/perl5/LaTeXML/Package/tikz.sty.ltxml...
+Warning:missing_file:tikz Can't find package tikz
+	at tikz.sty.ltxml; line 24
+	Anticipate undefined macros or environments
+	In Core::Gullet[@0x45c5988] /opt/lib/perl5/LaTeXML/Package/tikz.sty.ltxml; line 24
+ 0.00 sec)
+Info:unexpected:textsize=tiny Unexpected option 'textsize=tiny' passed to todonotes.sty
+	at todonotes.sty.ltxml; line 46
+ 0.05 sec)
+Info:unexpected:options Unused global options: nohyperref
+	at example_paper.tex; line 40 col 0 - line 40 col 16
+Error:undefined:{algorithm} The environment {algorithm} is not defined.
+	at example_paper.tex; line 186 col 0 - line 186 col 17
+	Next token is T_SPACE[U+000a/LF] ( == T_SPACE[U+000a/LF])
+	In Core::Definition::Expandable[\begin {}] /opt/lib/perl5/LaTeXML/Package/LaTeX.pool.ltxml; line 181
+	 <= Core::Gullet[@0x45c5988] <= Core::Stomach[@0x45d4938] <= ...
+Error:unexpected:\caption Use of \caption outside any known float
+	at example_paper.tex; line 187 col 12 - line 187 col 12
+	In Core::Definition::Constructor[\@@gene... /opt/lib/perl5/LaTeXML/Package/LaTeX.pool.ltxml; line 3329
+	 <= Core::Stomach[@0x45d4938] <= ...
+Error:expected:\fi Missing \fi or \else, conditional fell off end
+	at example_paper.tex; line 379 col 0 - line 379 col 0
+	Conditional started at example_paper.tex; line 189 col 14 - line 189 col 14
+	Input is empty
+	In Core::Definition::Conditional[\iffalse] /opt/lib/perl5/LaTeXML/Package/TeX.pool.ltxml; line 832
+	 <= Core::Gullet[@0x45c5988] <= Core::Stomach[@0x45d4938] <= ...
+ 1.54 sec)
+Error:expected:\end{algorithmic} Input ended while environment algorithmic was open
+	at String; line 1 col 0 - line 1 col 0
+Error:expected:\fi Input ended while conditional \ifthenelse was incomplete
+	at String; line 1 col 0 - line 1 col 0
+	started at example_paper.tex; line 189 col 14 - line 189 col 14
+ 1.55 sec)
+(Building...
+(Loading compiled schema /opt/lib/perl5/LaTeXML/resources/RelaxNG/LaTeXML.model... 0.01 sec) 1.32 sec)
+(Rewriting... 0.02 sec)
+(Math Parsing 120 formulae ......
+Warning:not_parsed:POSTSUBSCRIPT.RELOP.UNKNOWN>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 126 col 8 - line 126 col 128
+	In "${J(\pi)=\mathbb{E}\left[\sum_{j=0}^{\infty}\gamma^{j}r(s_{j},a_{j})\right],s_%
+	{0}\sim\rho_{0},a_{t}\sim\pi(\cdot\mid s_{t})}$"
+	J[[UNKNOWN]] ([[OPEN]] π[[UNKNOWN]] )[[CLOSE]] =[[RELOP]] E[[UNKNOWN]] \left[[[OPEN]] ∑[[SUMOP]] _{j=0}[[POSTSUBSCRIPT]] ^{\infty}[[POSTSUPERSCRIPT]] γ[[UNKNOWN]] ^{j}[[POSTSUPERSCRIPT]] r[[UNKNOWN]] ([[OPEN]] s[[UNKNOWN]] _{j}[[POSTSUBSCRIPT]] ,[[PUNCT]] a[[UNKNOWN]] _{j}[[POSTSUBSCRIPT]] )[[CLOSE]] \right][[CLOSE]] ,[[PUNCT]] s[[UNKNOWN]] _{0}[[POSTSUBSCRIPT]] ∼[[RELOP]] ρ[[UNKNOWN]] _{0}[[POSTSUBSCRIPT]] ,[[PUNCT]] a[[UNKNOWN]] _{t}[[POSTSUBSCRIPT]] ∼[[RELOP]] π[[UNKNOWN]]
+	        > ([[OPEN]] ⋅[[MULOP]] ∣[[VERTBAR]] s[[UNKNOWN]] _{t}[[POSTSUBSCRIPT]] )[[CLOSE]]
+Warning:not_parsed:POSTSUBSCRIPT.RELOP.UNKNOWN>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 126 col 132 - line 126 col 168
+	In "${s_{t+1}\sim p(\cdot\mid s_{t},a_{t})}$"
+	s[[UNKNOWN]] _{t+1}[[POSTSUBSCRIPT]] ∼[[RELOP]] p[[UNKNOWN]]
+	        > ([[OPEN]] ⋅[[MULOP]] ∣[[VERTBAR]] s[[UNKNOWN]] _{t}[[POSTSUBSCRIPT]] ,[[PUNCT]] a[[UNKNOWN]] _{t}[[POSTSUBSCRIPT]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 134 col 174 - line 134 col 215
+	In "$\mathcal{D}_{\textrm{JS}}(p_{\theta}\mid\mid p^{*})$"
+	D[[UNKNOWN]] _{\textrm{JS}}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] p[[UNKNOWN]] _{\theta}[[POSTSUBSCRIPT]] ∣[[VERTBAR]] ∣[[VERTBAR]] p[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 134 col 694 - line 134 col 750
+	In "$\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s,a)\mid\mid\rho^{*}(s,a))$"
+	D[[UNKNOWN]] _{\textrm{JS}}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] ρ[[UNKNOWN]] ^{\pi}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] a[[UNKNOWN]] )[[CLOSE]] ∣[[VERTBAR]] ∣[[VERTBAR]] ρ[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] a[[UNKNOWN]] )[[CLOSE]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 179 col 77 - line 179 col 119
+	In "$\mathcal{D}_{\textrm{JS}}(\rho^{b}\mid\mid\rho^{*})$"
+	D[[UNKNOWN]] _{\textrm{JS}}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] ρ[[UNKNOWN]] ^{b}[[POSTSUPERSCRIPT]] ∣[[VERTBAR]] ∣[[VERTBAR]] ρ[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 183 col 218 - line 183 col 274
+	In "$\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s,a)\mid\mid\rho^{*}(s,a))$"
+	D[[UNKNOWN]] _{\textrm{JS}}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] ρ[[UNKNOWN]] ^{\pi}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] a[[UNKNOWN]] )[[CLOSE]] ∣[[VERTBAR]] ∣[[VERTBAR]] ρ[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] a[[UNKNOWN]] )[[CLOSE]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 183 col 446 - line 183 col 494
+	In "$\mathcal{D}_{f}(\rho^{\pi}(s,s^{\prime})\mid\mid\rho^{*}(s,s^{\prime}))$"
+	D[[UNKNOWN]] _{f}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] ρ[[UNKNOWN]] ^{\pi}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] s[[UNKNOWN]] ^{\prime}[[POSTSUPERSCRIPT]] )[[CLOSE]] ∣[[VERTBAR]] ∣[[VERTBAR]] ρ[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] ,[[PUNCT]] s[[UNKNOWN]] ^{\prime}[[POSTSUPERSCRIPT]] )[[CLOSE]] )[[CLOSE]]
+Warning:not_parsed:UNKNOWN.POSTSUBSCRIPT>OPEN MathParser failed to match rule 'Anything'
+	at example_paper.tex; line 184 col 67 - line 184 col 118
+	In "$\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s)\mid\mid\rho^{*}(s))$"
+	D[[UNKNOWN]] _{\textrm{JS}}[[POSTSUBSCRIPT]]
+	        > ([[OPEN]] ρ[[UNKNOWN]] ^{\pi}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] )[[CLOSE]] ∣[[VERTBAR]] ∣[[VERTBAR]] ρ[[UNKNOWN]] ^{*}[[POSTSUPERSCRIPT]] ([[OPEN]] s[[UNKNOWN]] )[[CLOSE]] )[[CLOSE]]
+ 1.92 sec)
+Math parsing succeeded:
+   ltx:XMWrap: 1/1
+   ltx:XMArg: 163/163
+   ltx:XMath: 112/120
+Symbols assumed as simple identifiers (with # of occurences):
+   'A{blackboard}' (7), 'A{caligraphic}' (4), 'C{blackboard}' (2), 'C{italic}' (5), 'D{blackboard}' (4), 'D{caligraphic}' (19), 'D{italic}' (4), 'E{blackboard}' (8), 'J{italic}' (8), 'M{caligraphic}' (1), 'R{blackboard}' (3), 'S{caligraphic}' (6), 'X{caligraphic}' (1), 'a{italic}' (25), 'gamma' (2), 'h{italic}' (1), 'i{italic}' (3), 'j{italic}' (1), 'pi' (39), 'p{italic}' (18), 'rho' (63), 'r{italic}' (8), 's{italic}' (60), 't{italic}' (4), 'x{italic}' (10)
+Set MATHPARSER_SPECULATE to speculate on possible notations.
+(Finalizing... 0.10 sec)
+Conversion complete: 19 warnings; 9 errors; 4 undefined macros[\newboolean, {algorithm}, \ifthenelse, \setboolean]; 11 missing files[ltxcmds.sty, bitset.sty, kvsetkeys.sty, kvoptions.sty, tikz.sty, refcount.sty, gettitlestring.sty, ifthen.sty, kvdefinekeys.sty, cleveref.sty, keyval.sty] (See /opt/test/example_paper.latexml.log)
+(post-processing...
+(Scan omgitworks.html processing...
+Scan: DBStatus: 302/0 objects
+ 0.03 sec)
+(CrossRef omgitworks.html processing...
+Warning:expected:ids Missing DB Entry for ID: https://sites.google.com/view/medal-arl/home
+	In Post::CrossRef[@0x533e060] ->process
+Warning:expected:ids Missing Entry for citation: sharma2021autonomouscurr,even2005reinforcement,hester2018deep,kakade2002approximately,eysenbach2017leave,smith2021legged,chatzilygeroudis2018reset,xu2020continual,nair2018overcoming,brys2015reinforcement,ziebart2010modeling,co2020ecological,rafailov2021visual,goodfellow2014generative,goodfellow2016nips,fu2018variational,ghasemipour2020divergence,mnih2015human,bloesch2022towards,ng2000algorithms,singh2019end,ha2020learning,finn2016guided,nowozin2016f,zhu2020off,gupta2021reset,argall2009survey,rajeswaran2017learning,zhu20ingredients,burda2018exploration,rivest1993inference,sharma2021autonomous,lu2020reset,lee2019efficient,baram2017end,eysenbach2018diversity,ziebart2008maximum,kostrikov2018discriminator,gregor2016variational,han2015learning,vecerik2017leveraging,andrychowicz2017hindsight,ho2016generative,sharma2019dynamics,campos2020explore,haarnoja2018soft,torabi2019adversarial,hazan2019provably
+	In Post::CrossRef[@0x533e060] ->process
+Warning:expected:ids Missing Target for Label: LABEL:sec:gail,LABEL:sec:init_state_ablation,LABEL:sec:experiments,LABEL:alg:summary
+	In Post::CrossRef[@0x533e060] ->process
+ 0.02 sec)
+(Graphics omgitworks.html 2 to process... 0.00 sec)
+(MathML::Presentation omgitworks.html 120 to process...
+converted 120 Maths
+ 0.16 sec)
+(XSLT[using LaTeXML-html5.xsl] omgitworks.html processing... 0.02 sec)
+(Writer omgitworks.html processing... 0.00 sec) 0.23 sec)
+Post-processing complete: 3 warnings (See /opt/test/example_paper.latexml.log)
+processing finished Thu Dec 28 14:55:51 2023
+Status:conversion:2

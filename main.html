@@ -1,0 +1,1239 @@
+<!DOCTYPE html><html lang="en">
+<head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning</title>
+<!--Generated on Tue Dec 26 16:58:24 2023 by LaTeXML (version 0.8.7) http://dlmf.nist.gov/LaTeXML/.-->
+
+<link rel="stylesheet" href="LaTeXML.css" type="text/css">
+<link rel="stylesheet" href="ltx-article.css" type="text/css">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="keywords" lang="en" content="reinforcement learning,  autonomous,  discriminator">
+</head>
+<body>
+<div class="ltx_page_main">
+<div class="ltx_page_content">
+<article class="ltx_document ltx_pruned_first">
+<h1 class="ltx_title ltx_title_document">A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning</h1>
+<div class="ltx_authors">
+<span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Archit Sharma
+</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Rehaan Ahmad
+</span></span>
+<span class="ltx_author_before">  </span><span class="ltx_creator ltx_role_author">
+<span class="ltx_personname">Chelsea Finn
+</span></span>
+</div>
+
+<div class="ltx_abstract">
+<h6 class="ltx_title ltx_title_abstract">Abstract</h6>
+<p class="ltx_p">While reinforcement learning (RL) provides a framework for learning through trial and error, translating RL algorithms into the real world has remained challenging. A major hurdle to real-world application arises from the development of algorithms in an episodic setting where the environment is reset after every trial, in contrast with the continual and non-episodic nature of the real-world encountered by embodied agents such as humans and robots.
+Enabling agents to learn behaviors autonomously in such non-episodic environments requires that the agent to be able to conduct its own trials.
+Prior works have considered an alternating approach where a forward policy learns to solve the task and the backward policy learns to reset the environment, but what initial state distribution should the backward policy reset the agent to? Assuming access to a few demonstrations, we propose a new method, MEDAL, that trains the backward policy to match the state distribution in the provided demonstrations. This keeps the agent close to the task-relevant states, allowing for a mix of easy and difficult starting states for the forward policy. Our experiments show that MEDAL matches or outperforms prior methods on three sparse-reward continuous control tasks from the EARL benchmark, with 40% gains on the hardest task, while making fewer assumptions than prior works. Code and videos are at: <span class="ltx_ref ltx_ref_self">https://sites.google.com/view/medal-arl/home</span></p>
+</div>
+<div class="ltx_keywords">reinforcement learning, autonomous, discriminator
+</div>
+<div id="p2" class="ltx_para">
+<br class="ltx_break">
+</div>
+<section id="S1" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">1 </span>Introduction</h2>
+
+<div id="S1.p1" class="ltx_para">
+<p class="ltx_p">A cornerstone of human and animal intelligence is the ability to learn autonomously through trial and error. To that extent, reinforcement learning (RL) presents a natural framework to develop learning algorithms for embodied agents. Unfortunately, the predominant emphasis on episodic learning represents a departure from the continual non-episodic nature of the real-world, which presents multiple technical challenges. First, episodic training undermines the autonomy of the learning agent by requiring repeated extrinsic interventions to reset the environment after every trial, which can be both time-consuming and expensive as these interventions may have to be conducted by a human. Second, episodic training from narrow initial state distributions can lead to less robust policies that are reliant on environment resets to recover; e.g. <cite class="ltx_cite ltx_citemacro_citet">Sharma et al. (<a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite> show that policies learned in episodic settings with narrow initial state distributions are more sensitive to perturbations than those trained in non-episodic settings.</p>
+</div>
+<figure id="S1.F1" class="ltx_figure"><img src="figures/medal.png" id="S1.F1.g1" class="ltx_graphics ltx_centering ltx_img_landscape" width="598" height="229" alt="Refer to caption">
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 1: </span>An overview of our proposed method MEDAL (<span class="ltx_text ltx_font_italic">right</span>) contrasting it with forward-backward RL <cite class="ltx_cite ltx_citemacro_citep">(Han et al., <a href="#bib.bib22" title="" class="ltx_ref">2015</a>; Eysenbach et al., <a href="#bib.bib11" title="" class="ltx_ref">2017</a>)</cite> (<span class="ltx_text ltx_font_italic">left</span>). MEDAL trains a backward policy <math id="S1.F1.m4" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> to pull the agent back to the state distribution defined by the demonstrations, enabling the forward policy <math id="S1.F1.m5" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> to the learn the task efficiently in contrast to FBRL that retrieves the agent to the initial state distribution before every trial of <math id="S1.F1.m6" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math>.</figcaption>
+</figure>
+<div id="S1.p2" class="ltx_para">
+<p class="ltx_p">Prior works have found that conventional RL algorithms substantially depreciate in performance when applied in non-episodic settings <cite class="ltx_cite ltx_citemacro_citep">(Co-Reyes et al., <a href="#bib.bib9" title="" class="ltx_ref">2020</a>; Zhu et al., <a href="#bib.bib46" title="" class="ltx_ref">2020a</a>; Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>.
+Why do such algorithms struggle to learn in non-episodic, autonomous RL (ARL) settings?
+Resetting the environment after every single episode allows for natural repetition: the agent can repeatedly practice the task under a narrow set of initial conditions to incrementally improve the policy. Critically, algorithms developed for episodic learning do not have to learn how to reach these initial conditions in the first place. Thus, the main additional challenge in non-episodic, autonomous RL settings is to enable the repetitive practice that is necessary to learn an adept policy. For example, an autonomous robot that is practicing how to close a door will also need to learn how to open a door.</p>
+</div>
+<div id="S1.p3" class="ltx_para">
+<p class="ltx_p">Several recent works learn a backward policy to enable the main forward policy to practice the task: for example, <cite class="ltx_cite ltx_citemacro_citet">Han et al. (<a href="#bib.bib22" title="" class="ltx_ref">2015</a>); Eysenbach et al. (<a href="#bib.bib11" title="" class="ltx_ref">2017</a>)</cite> propose a backward policy that learns to match the initial state distribution.
+However, unlike the episodic setting, the agent can practice the task from any initial state, and not just the narrow initial state distribution that is usually provided by resets. Can the backward policy create starting conditions that enable the forward policy to improve efficiently? It could be useful for the agent to try the task both from “easy” states that are close to the goal and harder states that are representative of the starting conditions at evaluation. Easier and harder initial conditions can be seen as a curriculum that simplifies exploration.
+<cite class="ltx_cite ltx_citemacro_citet">Kakade &amp; Langford (<a href="#bib.bib26" title="" class="ltx_ref">2002</a>)</cite> provide a theoretical discussion on how the initial state distribution affects the performance of the learned policy. One of the results show that the closer the starting state distribution is to the <span class="ltx_text ltx_font_italic">state distribution of the optimal policy</span> <math id="S1.p3.m1" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math>, the faster the policy moves toward the optimal policy <math id="S1.p3.m2" class="ltx_Math" alttext="\pi^{*}" display="inline"><msup><mi>π</mi><mo>*</mo></msup></math>.
+While an oracle access to <math id="S1.p3.m3" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math> is rarely available, we often have access to a modest set of demonstrations. In this work, we aim to improve autonomous RL by learning a backward policy that matches the starting state distribution to the state distribution observed in the demonstrations.
+This enables the agent to practice the task from a variety of initial states, including some that are possibly easier to explore from. An intuitive representation of the algorithm is shown in Figure <a href="#S1.F1" title="Figure 1 ‣ 1 Introduction ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">1</span></a>.</p>
+</div>
+<div id="S1.p4" class="ltx_para">
+<p class="ltx_p">The primary contribution of our work is an autonomous RL algorithm <span class="ltx_text ltx_font_italic">Matching Expert Distributions for Autonomous Learning</span> (MEDAL), which learns a backward policy that matches the state distribution of a small set of demonstrations, in conjunction with a forward policy that optimizes the task reward. We use a classification based approach that implicitly minimizes the distance between the state distribution of the backward policy and the state distribution in the demonstrations without requiring the density under either distribution.
+In Section <a href="#S5" title="5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5</span></a>, we empirically analyze the performance of MEDAL on the Environments for Autonomous RL (EARL) benchmark <cite class="ltx_cite ltx_citemacro_citep">(Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>. We find that MEDAL matches or outperforms competitive baselines in all of the sparse-reward environments, with a more than a 40% gain in success rate on the hardest task where all other comparisons fail completely. Our ablations additionally indicate the importance of matching the state distribution in the demonstrations, providing additional empirical support for the hypothesis that the expert state distribution constitutes a good starting state distribution for learning a task.</p>
+</div>
+</section>
+<section id="S2" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">2 </span>Related Work</h2>
+
+<div id="S2.p1" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Autonomous RL.</span> Using additional policies to enable autonomous learning goes back to the works of <cite class="ltx_cite ltx_citemacro_citep">(Rivest &amp; Schapire, <a href="#bib.bib36" title="" class="ltx_ref">1993</a>)</cite> in context of finite state automaton, also referred to as “homing strategies” in <cite class="ltx_cite ltx_citemacro_citep">(Even-Dar et al., <a href="#bib.bib10" title="" class="ltx_ref">2005</a>)</cite> in context of POMDPs. More recently, in context of continuous control, several works propose autonomous RL methods targeting different starting distributions to learn from: <cite class="ltx_cite ltx_citemacro_citet">Han et al. (<a href="#bib.bib22" title="" class="ltx_ref">2015</a>); Eysenbach et al. (<a href="#bib.bib11" title="" class="ltx_ref">2017</a>)</cite> match the initial state distribution, <cite class="ltx_cite ltx_citemacro_citet">Zhu et al. (<a href="#bib.bib46" title="" class="ltx_ref">2020a</a>)</cite> leverage state-novelty <cite class="ltx_cite ltx_citemacro_citep">(Burda et al., <a href="#bib.bib6" title="" class="ltx_ref">2018</a>)</cite> to create new starting conditions for every trial, and <cite class="ltx_cite ltx_citemacro_citet">Sharma et al. (<a href="#bib.bib38" title="" class="ltx_ref">2021</a>)</cite> create a curriculum of starting states based on the performance of the forward policy to accelerate the learning. In addition, <cite class="ltx_cite ltx_citemacro_citep">(Xu et al., <a href="#bib.bib44" title="" class="ltx_ref">2020</a>; Lu et al., <a href="#bib.bib29" title="" class="ltx_ref">2020</a>)</cite> leverage ideas from unsupervised skill discovery <cite class="ltx_cite ltx_citemacro_citep">(Gregor et al., <a href="#bib.bib18" title="" class="ltx_ref">2016</a>; Eysenbach et al., <a href="#bib.bib12" title="" class="ltx_ref">2018</a>; Sharma et al., <a href="#bib.bib37" title="" class="ltx_ref">2019</a>; Hazan et al., <a href="#bib.bib23" title="" class="ltx_ref">2019</a>; Campos et al., <a href="#bib.bib7" title="" class="ltx_ref">2020</a>)</cite>,
+with the former using it to create an adversarial initial state distribution and the latter to tackle non-episodic lifelong learning with a non-stationary task-distribution. Our work proposes a novel algorithm MEDAL that, unlike these prior works,
+opts to match the starting distribution to the state distribution
+of demonstrations.
+Value-accelerated Persistent RL (VaPRL) <cite class="ltx_cite ltx_citemacro_citep">(Sharma et al., <a href="#bib.bib38" title="" class="ltx_ref">2021</a>)</cite> also considers the problem of autonomous RL with a few initial demonstrations.
+Unlike VaPRL, our algorithm does not rely on relabeling transitions with new goals <cite class="ltx_cite ltx_citemacro_citep">(Andrychowicz et al., <a href="#bib.bib1" title="" class="ltx_ref">2017</a>)</cite>, and thus does not require access to the functional form of the reward function, eliminating the need for additional hyperparameters that require task-specific tuning.
+A simple and task-agnostic ARL method would accelerate the development of autonomous robotic systems, the benefits of such autonomy being demonstrated by several recent works
+<cite class="ltx_cite ltx_citemacro_citep">(Chatzilygeroudis et al., <a href="#bib.bib8" title="" class="ltx_ref">2018</a>; Gupta et al., <a href="#bib.bib19" title="" class="ltx_ref">2021</a>; Smith et al., <a href="#bib.bib41" title="" class="ltx_ref">2021</a>; Ha et al., <a href="#bib.bib20" title="" class="ltx_ref">2020</a>; Bloesch et al., <a href="#bib.bib4" title="" class="ltx_ref">2022</a>)</cite>.</p>
+</div>
+<div id="S2.p2" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Distribution Matching in RL.</span> Critical to our method is matching the state distribution of the demonstrations.
+Such a distribution matching perspective is often employed in inverse RL <cite class="ltx_cite ltx_citemacro_citep">(Ng et al., <a href="#bib.bib32" title="" class="ltx_ref">2000</a>; Ziebart et al., <a href="#bib.bib48" title="" class="ltx_ref">2008</a>, <a href="#bib.bib49" title="" class="ltx_ref">2010</a>; Finn et al., <a href="#bib.bib13" title="" class="ltx_ref">2016</a>)</cite> and imitation learning <cite class="ltx_cite ltx_citemacro_citep">(Ghasemipour et al., <a href="#bib.bib15" title="" class="ltx_ref">2020</a>; Argall et al., <a href="#bib.bib2" title="" class="ltx_ref">2009</a>)</cite> or to encourage efficient exploration <cite class="ltx_cite ltx_citemacro_citep">(Lee et al., <a href="#bib.bib28" title="" class="ltx_ref">2019</a>)</cite>. More recently, several works have leveraged implicit distribution matching by posing a classification problem, pioneered in <cite class="ltx_cite ltx_citemacro_citet">Goodfellow et al. (<a href="#bib.bib17" title="" class="ltx_ref">2014</a>)</cite>, to imitate demonstrations <cite class="ltx_cite ltx_citemacro_citep">(Ho &amp; Ermon, <a href="#bib.bib25" title="" class="ltx_ref">2016</a>; Baram et al., <a href="#bib.bib3" title="" class="ltx_ref">2017</a>; Kostrikov et al., <a href="#bib.bib27" title="" class="ltx_ref">2018</a>; Rafailov et al., <a href="#bib.bib34" title="" class="ltx_ref">2021</a>)</cite>, to imitate sequences of observations <cite class="ltx_cite ltx_citemacro_citep">(Torabi et al., <a href="#bib.bib42" title="" class="ltx_ref">2019</a>; Zhu et al., <a href="#bib.bib47" title="" class="ltx_ref">2020b</a>)</cite>, or to learn reward functions for goal-reaching <cite class="ltx_cite ltx_citemacro_citep">(Fu et al., <a href="#bib.bib14" title="" class="ltx_ref">2018</a>; Singh et al., <a href="#bib.bib40" title="" class="ltx_ref">2019</a>)</cite>. Our work employs a similar discriminator-based approach to encourage the state distribution induced by the policy to match that of the demonstrations. Importantly, our work focuses on creating an initial state distribution that the forward policy can learn efficiently from, as opposed to these prior works that are designed for the episodic RL setting. As the experiments in Section <a href="#S5.SS2" title="5.2 Imitation Learning ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5.2</span></a> and Section <a href="#S5.SS3" title="5.3 The Choice of State Distribution ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5.3</span></a> show, naïve extensions of these methods to non-episodic settings don’t fare well.</p>
+</div>
+<div id="S2.p3" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Accelerating RL using Demonstrations.</span> There is rich literature on using demonstrations to speed up reinforcement learning, especially for sparse reward problems.
+Prior works have considering shaping rewards using demonstrations <cite class="ltx_cite ltx_citemacro_citep">(Brys et al., <a href="#bib.bib5" title="" class="ltx_ref">2015</a>)</cite>, pre-training the policy <cite class="ltx_cite ltx_citemacro_citep">(Rajeswaran et al., <a href="#bib.bib35" title="" class="ltx_ref">2017</a>)</cite>, using behavior cloning loss as a regularizer for policy gradients <cite class="ltx_cite ltx_citemacro_citep">(Rajeswaran et al., <a href="#bib.bib35" title="" class="ltx_ref">2017</a>)</cite> and <math id="S2.p3.m1" class="ltx_Math" alttext="Q" display="inline"><mi>Q</mi></math>-learning <cite class="ltx_cite ltx_citemacro_citep">(Nair et al., <a href="#bib.bib31" title="" class="ltx_ref">2018</a>)</cite>, and initializing the replay buffer <cite class="ltx_cite ltx_citemacro_citep">(Nair et al., <a href="#bib.bib31" title="" class="ltx_ref">2018</a>; Vecerik et al., <a href="#bib.bib43" title="" class="ltx_ref">2017</a>; Hester et al., <a href="#bib.bib24" title="" class="ltx_ref">2018</a>)</cite>. MEDAL leverages demonstrations to accelerate non-episodic reinforcement learning by utilizing demo distribution to create initial conditions for the forward policy. The techniques proposed in these prior works are complimentary to our proposal, and can be leveraged for non-episodic RL in general as well. Indeed, for all methods in our experiments, the replay buffer is initialized with demonstrations.</p>
+</div>
+</section>
+<section id="S3" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">3 </span>Preliminaries</h2>
+
+<div id="S3.p1" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Autonomous Reinforcement Learning</span>. We use the ARL framework for non-episodic learning defined in <cite class="ltx_cite ltx_citemacro_citet">Sharma et al. (<a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>, which we briefly summarize here.
+Consider a Markov decision process <math id="S3.p1.m1" class="ltx_Math" alttext="{\mathcal{M}\equiv(\mathcal{S},\mathcal{A},p,r,\rho_{0})}" display="inline"><mrow><mi class="ltx_font_mathcaligraphic">ℳ</mi><mo>≡</mo><mrow><mo stretchy="false">(</mo><mi class="ltx_font_mathcaligraphic">𝒮</mi><mo>,</mo><mi class="ltx_font_mathcaligraphic">𝒜</mi><mo>,</mo><mi>p</mi><mo>,</mo><mi>r</mi><mo>,</mo><msub><mi>ρ</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow></math>, where <math id="S3.p1.m2" class="ltx_Math" alttext="\mathcal{S}" display="inline"><mi class="ltx_font_mathcaligraphic">𝒮</mi></math> denotes the state space, <math id="S3.p1.m3" class="ltx_Math" alttext="\mathcal{A}" display="inline"><mi class="ltx_font_mathcaligraphic">𝒜</mi></math> denotes the action space, <math id="S3.p1.m4" class="ltx_Math" alttext="{p:\mathcal{S}\times\mathcal{A}\times\mathcal{S}\mapsto\mathbb{R}_{\geq 0}}" display="inline"><mrow><mi>p</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mi class="ltx_font_mathcaligraphic">𝒮</mi><mo lspace="0.222em" rspace="0.222em">×</mo><mi class="ltx_font_mathcaligraphic">𝒜</mi><mo lspace="0.222em" rspace="0.222em">×</mo><mi class="ltx_font_mathcaligraphic">𝒮</mi></mrow><mo stretchy="false">↦</mo><msub><mi>ℝ</mi><mrow><mi></mi><mo>≥</mo><mn>0</mn></mrow></msub></mrow></mrow></math> denotes the transition dynamics, <math id="S3.p1.m5" class="ltx_Math" alttext="{r:\mathcal{S}\times\mathcal{A}\mapsto\mathbb{R}}" display="inline"><mrow><mi>r</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mi class="ltx_font_mathcaligraphic">𝒮</mi><mo lspace="0.222em" rspace="0.222em">×</mo><mi class="ltx_font_mathcaligraphic">𝒜</mi></mrow><mo stretchy="false">↦</mo><mi>ℝ</mi></mrow></mrow></math> denotes the reward function and <math id="S3.p1.m6" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math> denotes the initial state distribution. The learning algorithm <math id="S3.p1.m7" class="ltx_Math" alttext="\mathbb{A}" display="inline"><mi>𝔸</mi></math> is defined as <math id="S3.p1.m8" class="ltx_Math" alttext="{\mathbb{A}:\{s_{i},a_{i},s_{i+1},r_{i}\}_{i=0}^{t}\mapsto\{a_{t},\pi_{t}\}}" display="inline"><mrow><mi>𝔸</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><msubsup><mrow><mo stretchy="false">{</mo><msub><mi>s</mi><mi>i</mi></msub><mo>,</mo><msub><mi>a</mi><mi>i</mi></msub><mo>,</mo><msub><mi>s</mi><mrow><mi>i</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>,</mo><msub><mi>r</mi><mi>i</mi></msub><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mi>t</mi></msubsup><mo stretchy="false">↦</mo><mrow><mo stretchy="false">{</mo><msub><mi>a</mi><mi>t</mi></msub><mo>,</mo><msub><mi>π</mi><mi>t</mi></msub><mo stretchy="false">}</mo></mrow></mrow></mrow></math>, which maps the transitions collected in the environment until time <math id="S3.p1.m9" class="ltx_Math" alttext="t" display="inline"><mi>t</mi></math> to an action <math id="S3.p1.m10" class="ltx_Math" alttext="a_{t}" display="inline"><msub><mi>a</mi><mi>t</mi></msub></math> and its best guess at the optimal policy <math id="S3.p1.m11" class="ltx_Math" alttext="{\pi_{t}:\mathcal{S}\times\mathcal{A}\mapsto\mathbb{R}_{\geq 0}}" display="inline"><mrow><msub><mi>π</mi><mi>t</mi></msub><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mi class="ltx_font_mathcaligraphic">𝒮</mi><mo lspace="0.222em" rspace="0.222em">×</mo><mi class="ltx_font_mathcaligraphic">𝒜</mi></mrow><mo stretchy="false">↦</mo><msub><mi>ℝ</mi><mrow><mi></mi><mo>≥</mo><mn>0</mn></mrow></msub></mrow></mrow></math>. First, the initial state is sampled exactly once (<math id="S3.p1.m12" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math>) at the beginning of the interaction and the learning algorithm interacts with the environment through the actions <math id="S3.p1.m13" class="ltx_Math" alttext="a_{t}" display="inline"><msub><mi>a</mi><mi>t</mi></msub></math> till <math id="S3.p1.m14" class="ltx_Math" alttext="t\to\infty" display="inline"><mrow><mi>t</mi><mo stretchy="false">→</mo><mi mathvariant="normal">∞</mi></mrow></math>. This is the key distinction from an episodic RL setting where the environment resets to a state from the initial state distribution after a few steps. Second, the action taken in the environment does not necessarily come from <math id="S3.p1.m15" class="ltx_Math" alttext="\pi_{t}" display="inline"><msub><mi>π</mi><mi>t</mi></msub></math>, for example, a backward policy <math id="S3.p1.m16" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> may generate the action taken in the environment.</p>
+</div>
+<div id="S3.p2" class="ltx_para">
+<p class="ltx_p">ARL defines two metrics: <span class="ltx_text ltx_font_italic">Continuing Policy Evaluation</span> measures the reward accumulated by <math id="S3.p2.m1" class="ltx_Math" alttext="\mathbb{A}" display="inline"><mi>𝔸</mi></math> over the course of training, defined as <math id="S3.p2.m2" class="ltx_Math" alttext="{\mathbb{C}(\mathbb{A})=\lim_{h\to\infty}\frac{1}{h}\mathbb{E}\left[\sum_{t=0}%
+^{h}r(s_{t},a_{t})\right]}" display="inline"><mrow><mrow><mi>ℂ</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow><mo rspace="0.1389em">=</mo><mrow><msub><mo lspace="0.1389em" rspace="0.167em">lim</mo><mrow><mi>h</mi><mo stretchy="false">→</mo><mi mathvariant="normal">∞</mi></mrow></msub><mrow><mfrac><mn>1</mn><mi>h</mi></mfrac><mo>⁢</mo><mi>𝔼</mi><mo>⁢</mo><mrow><mo>[</mo><mrow><msubsup><mo lspace="0em">∑</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mi>h</mi></msubsup><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>s</mi><mi>t</mi></msub><mo>,</mo><msub><mi>a</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>]</mo></mrow></mrow></mrow></mrow></math> and
+<span class="ltx_text ltx_font_italic">Deployed Policy Evaluation</span> metric measures how quickly an algorithm improves the output policy <math id="S3.p2.m3" class="ltx_Math" alttext="\pi_{t}" display="inline"><msub><mi>π</mi><mi>t</mi></msub></math> at the task defined by the reward function <math id="S3.p2.m4" class="ltx_Math" alttext="r" display="inline"><mi>r</mi></math>, defined as:</p>
+<table id="S3.E1" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="S3.E1.m1" class="ltx_Math" alttext="\mathbb{D}(\mathbb{A})=\sum_{t=0}^{\infty}J(\pi^{*})-J(\pi_{t})," display="block"><mrow><mrow><mrow><mi>𝔻</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow><mo rspace="0.111em">=</mo><mrow><mrow><munderover><mo movablelimits="false">∑</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant="normal">∞</mi></munderover><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msup><mi>π</mi><mo>*</mo></msup><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>−</mo><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>π</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><mo>,</mo></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+<td rowspan="1" class="ltx_eqn_cell ltx_eqn_eqno ltx_align_middle ltx_align_right"><span class="ltx_tag ltx_tag_equation ltx_align_right">(1)</span></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="S3.p2.m5" class="ltx_math_unparsed" alttext="{J(\pi)=\mathbb{E}\left[\sum_{j=0}^{\infty}\gamma^{j}r(s_{j},a_{j})\right],s_{%
+0}\sim\rho_{0},a_{t}\sim\pi(\cdot\mid s_{t})}" display="inline"><mrow><mi>J</mi><mrow><mo stretchy="false">(</mo><mi>π</mi><mo stretchy="false">)</mo></mrow><mo>=</mo><mi>𝔼</mi><mrow><mo>[</mo><msubsup><mo lspace="0em">∑</mo><mrow><mi>j</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant="normal">∞</mi></msubsup><msup><mi>γ</mi><mi>j</mi></msup><mi>r</mi><mrow><mo stretchy="false">(</mo><msub><mi>s</mi><mi>j</mi></msub><mo>,</mo><msub><mi>a</mi><mi>j</mi></msub><mo stretchy="false">)</mo></mrow><mo>]</mo></mrow><mo>,</mo><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub><mo>,</mo><msub><mi>a</mi><mi>t</mi></msub><mo>∼</mo><mi>π</mi><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><msub><mi>s</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></math>, <math id="S3.p2.m6" class="ltx_math_unparsed" alttext="{s_{t+1}\sim p(\cdot\mid s_{t},a_{t})}" display="inline"><mrow><msub><mi>s</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>∼</mo><mi>p</mi><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><msub><mi>s</mi><mi>t</mi></msub><mo>,</mo><msub><mi>a</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></math> and <math id="S3.p2.m7" class="ltx_Math" alttext="{\pi^{*}\in\operatorname*{arg\,max}_{\pi}J(\pi)}" display="inline"><mrow><msup><mi>π</mi><mo>*</mo></msup><mo>∈</mo><mrow><mrow><msub><mrow><mi>arg</mi><mo lspace="0.170em">⁢</mo><mi>max</mi></mrow><mi>π</mi></msub><mo>⁡</mo><mi>J</mi></mrow><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></math>. The goal for an algorithm <math id="S3.p2.m8" class="ltx_Math" alttext="\mathbb{A}" display="inline"><mi>𝔸</mi></math> is to minimize <math id="S3.p2.m9" class="ltx_Math" alttext="\mathbb{D}(\mathbb{A})" display="inline"><mrow><mi>𝔻</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow></math>, that is to bring <math id="S3.p2.m10" class="ltx_Math" alttext="J(\pi_{t})" display="inline"><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>π</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></math> close to <math id="S3.p2.m11" class="ltx_Math" alttext="J(\pi^{*})" display="inline"><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msup><mi>π</mi><mo>*</mo></msup><mo stretchy="false">)</mo></mrow></mrow></math> in the least number of samples possible. Intuitively, minimizing <math id="S3.p2.m12" class="ltx_Math" alttext="\mathbb{D}(\mathbb{A})" display="inline"><mrow><mi>𝔻</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow></math> corresponds to maximizing the area under the curve for <math id="S3.p2.m13" class="ltx_Math" alttext="J(\pi_{t})" display="inline"><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>π</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></math> versus <math id="S3.p2.m14" class="ltx_Math" alttext="t" display="inline"><mi>t</mi></math>.</p>
+</div>
+<div id="S3.p3" class="ltx_para">
+<p class="ltx_p"><math id="S3.p3.m1" class="ltx_Math" alttext="\mathbb{C}(\mathbb{A})" display="inline"><mrow><mi>ℂ</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow></math> corresponds to the more conventional average-reward reinforcement learning. While algorithms are able to accumulate large rewards during training, they do not necessarily recover the optimal policy in non-episodic settings <cite class="ltx_cite ltx_citemacro_citep">(Zhu et al., <a href="#bib.bib46" title="" class="ltx_ref">2020a</a>; Co-Reyes et al., <a href="#bib.bib9" title="" class="ltx_ref">2020</a>; Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>. In response, <cite class="ltx_cite ltx_citemacro_citet">Sharma et al. (<a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite> introduce <math id="S3.p3.m2" class="ltx_Math" alttext="\mathbb{D}(\mathbb{A})" display="inline"><mrow><mi>𝔻</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>𝔸</mi><mo stretchy="false">)</mo></mrow></mrow></math> to explicitly encourage algorithms to learn task-solving behaviors and not just accumulate reward through training.</p>
+</div>
+<div id="S3.p4" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Imitation Learning via Distribution Matching.</span> Generative Adversarial Networks <cite class="ltx_cite ltx_citemacro_citep">(Goodfellow, <a href="#bib.bib16" title="" class="ltx_ref">2016</a>)</cite> pioneered implicit distribution matching for distributions where likelihood cannot be computed explicitly. Given a dataset of samples <math id="S3.p4.m1" class="ltx_Math" alttext="\{x_{i}\}_{i=1}^{N}" display="inline"><msubsup><mrow><mo stretchy="false">{</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup></math>, where <math id="S3.p4.m2" class="ltx_Math" alttext="x_{i}\sim p^{*}(\cdot)" display="inline"><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>∼</mo><mrow><msup><mi>p</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow></mrow></math> for some target distribution <math id="S3.p4.m3" class="ltx_Math" alttext="p^{*}" display="inline"><msup><mi>p</mi><mo>*</mo></msup></math> over the data space <math id="S3.p4.m4" class="ltx_Math" alttext="\mathcal{X}" display="inline"><mi class="ltx_font_mathcaligraphic">𝒳</mi></math>, generative distribution <math id="S3.p4.m5" class="ltx_Math" alttext="p_{\theta}(\cdot)" display="inline"><mrow><msub><mi>p</mi><mi>θ</mi></msub><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow></math> can be learned through the following minimax optimization:</p>
+<table id="S3.E2" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="S3.E2.m1" class="ltx_Math" alttext="\min_{p_{\theta}}\max_{D}\mathbb{E}_{x\sim p^{*}}\left[\log D(x)\right]+%
+\mathbb{E}_{x\sim p_{\theta}}\left[\log(1-D(x))\right]" display="block"><mrow><mrow><mrow><munder><mi>min</mi><msub><mi>p</mi><mi>θ</mi></msub></munder><mo lspace="0.167em">⁡</mo><mrow><munder><mi>max</mi><mi>D</mi></munder><mo lspace="0.167em">⁡</mo><msub><mi>𝔼</mi><mrow><mi>x</mi><mo>∼</mo><msup><mi>p</mi><mo>*</mo></msup></mrow></msub></mrow></mrow><mo>⁢</mo><mrow><mo>[</mo><mrow><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mi>D</mi></mrow><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow><mo>]</mo></mrow></mrow><mo>+</mo><mrow><msub><mi>𝔼</mi><mrow><mi>x</mi><mo>∼</mo><msub><mi>p</mi><mi>θ</mi></msub></mrow></msub><mo>⁢</mo><mrow><mo>[</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>D</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>]</mo></mrow></mrow></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+<td rowspan="1" class="ltx_eqn_cell ltx_eqn_eqno ltx_align_middle ltx_align_right"><span class="ltx_tag ltx_tag_equation ltx_align_right">(2)</span></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="S3.p4.m6" class="ltx_Math" alttext="D:\mathcal{X}\mapsto[0,1]" display="inline"><mrow><mi>D</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mi class="ltx_font_mathcaligraphic">𝒳</mi><mo stretchy="false">↦</mo><mrow><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></mrow></mrow></math> is discriminator solving a binary classification problem. This can be shown to minimize the Jensen-Shannon divergence, that is <math id="S3.p4.m7" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(p_{\theta}\mid\mid p^{*})" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mi>θ</mi></msub><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>p</mi><mo>*</mo></msup><mo stretchy="false">)</mo></mrow></mrow></math> <cite class="ltx_cite ltx_citemacro_citep">(Goodfellow et al., <a href="#bib.bib17" title="" class="ltx_ref">2014</a>; Nowozin et al., <a href="#bib.bib33" title="" class="ltx_ref">2016</a>)</cite> by observing that the Bayes-optimal classifier satisfies <math id="S3.p4.m8" class="ltx_Math" alttext="D^{*}(x)=\frac{p^{*}(x)}{p^{*}(x)+p^{\theta}(x)}" display="inline"><mrow><mrow><msup><mi>D</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mfrac><mrow><msup><mi>p</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow><mrow><mrow><msup><mi>p</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow><mo>+</mo><mrow><msup><mi>p</mi><mi>θ</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></mfrac></mrow></math> (assuming that prior probability of true data and fake data is balanced). Because we do not require an explicit density under the generative distribution and only require the ability to sample the distribution, this allows construction of imitation learning methods such as GAIL <cite class="ltx_cite ltx_citemacro_citep">(Ho &amp; Ermon, <a href="#bib.bib25" title="" class="ltx_ref">2016</a>)</cite> which minimizes <math id="S3.p4.m9" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s,a)\mid\mid\rho^{*}(s,a))" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>π</mi></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math>, where the policy <math id="S3.p4.m10" class="ltx_Math" alttext="\pi" display="inline"><mi>π</mi></math> is rolled out in the environment starting from initial state distribution <math id="S3.p4.m11" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math> to generate samples from the state-action distribution <math id="S3.p4.m12" class="ltx_Math" alttext="\rho^{\pi}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mi>π</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> and <math id="S3.p4.m13" class="ltx_Math" alttext="\rho^{*}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> is the target state-action distribution of the demonstrations.</p>
+</div>
+</section>
+<section id="S4" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">4 </span>Matching Expert Distributions for Autonomous Learning (MEDAL)</h2>
+
+<div id="S4.p1" class="ltx_para">
+<p class="ltx_p">Several prior works demonstrate the ineffectiveness of standard RL methods in non-episodic settings <cite class="ltx_cite ltx_citemacro_citep">(Co-Reyes et al., <a href="#bib.bib9" title="" class="ltx_ref">2020</a>; Zhu et al., <a href="#bib.bib46" title="" class="ltx_ref">2020a</a>; Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>. Adding noise to actions, for example <math id="S4.p1.m1" class="ltx_Math" alttext="\epsilon" display="inline"><mi>ϵ</mi></math>-greedy in DQN <cite class="ltx_cite ltx_citemacro_citep">(Mnih et al., <a href="#bib.bib30" title="" class="ltx_ref">2015</a>)</cite> or Gaussian noise in SAC <cite class="ltx_cite ltx_citemacro_citep">(Haarnoja et al., <a href="#bib.bib21" title="" class="ltx_ref">2018</a>)</cite>), can be sufficient for exploration in episodic setting where every trial starts from a narrow initial state distribution. However, such an approach becomes ineffective in non-episodic settings because the same policy is expected to both solve the task and be sufficiently exploratory. As a result, a common solution in non-episodic autonomous RL settings is to learn another policy in addition to the forward policy <math id="S4.p1.m2" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> that solves the task <cite class="ltx_cite ltx_citemacro_citep">(Han et al., <a href="#bib.bib22" title="" class="ltx_ref">2015</a>; Eysenbach et al., <a href="#bib.bib11" title="" class="ltx_ref">2017</a>; Zhu et al., <a href="#bib.bib46" title="" class="ltx_ref">2020a</a>)</cite>:
+a backward policy <math id="S4.p1.m3" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> that targets a set of states to explore solving the task from. More precisely, the forward policy <math id="S4.p1.m4" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> learns to solve the task from a state sampled from <math id="S4.p1.m5" class="ltx_Math" alttext="\rho^{b}" display="inline"><msup><mi>ρ</mi><mi>b</mi></msup></math>, the marginal state distribution of <math id="S4.p1.m6" class="ltx_Math" alttext="\pi^{b}" display="inline"><msup><mi>π</mi><mi>b</mi></msup></math>.
+An appropriate <math id="S4.p1.m7" class="ltx_Math" alttext="\rho^{b}" display="inline"><msup><mi>ρ</mi><mi>b</mi></msup></math> can improve the efficiency of learning <math id="S4.p1.m8" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> by creating an effective initial state distribution for it. What should the <math id="S4.p1.m9" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> optimize? We discuss this question in Section <a href="#S4.SS1" title="4.1 Finding Better Starting States ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">4.1</span></a> and a practical way to optimize the suggested objective in Section <a href="#S4.SS2" title="4.2 Resetting to Match the Expert State Distribution ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">4.2</span></a>. An overview of our proposed algorithm is given in Section <a href="#S4.SS3" title="4.3 MEDAL Overview ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">4.3</span></a>.</p>
+</div>
+<figure id="S4.F2" class="ltx_figure"><img src="figures/tabletop_init_state_transfer.png" id="S4.F2.g1" class="ltx_graphics ltx_centering ltx_img_landscape" width="479" height="348" alt="Refer to caption">
+<br class="ltx_break ltx_centering">
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 2: </span>Comparison of sampling initial states <math id="S4.F2.m5" class="ltx_Math" alttext="s_{0}" display="inline"><msub><mi>s</mi><mn>0</mn></msub></math> from the state distribution of the optimal policy <math id="S4.F2.m6" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math>, with sampling the initial state from the default distribution <math id="S4.F2.m7" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math> in the episodic setting. The episodic return is computed by initializing the agent at <math id="S4.F2.m8" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math> in both the cases. The former improves both the sample efficiency and the performance of the final policy.</figcaption>
+</figure>
+<section id="S4.SS1" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">4.1 </span>Finding Better Starting States</h3>
+
+<div id="S4.SS1.p1" class="ltx_para">
+<p class="ltx_p">In episodic settings, <math id="S4.SS1.p1.m1" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> always starts exploring from <math id="S4.SS1.p1.m2" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math>, which is the same distribution from which it will be evaluated. A natural objective for <math id="S4.SS1.p1.m3" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> then is to minimize the distance between <math id="S4.SS1.p1.m4" class="ltx_Math" alttext="\rho^{b}" display="inline"><msup><mi>ρ</mi><mi>b</mi></msup></math> and <math id="S4.SS1.p1.m5" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math>. And indeed, prior works have proposed this approach <cite class="ltx_cite ltx_citemacro_citep">(Han et al., <a href="#bib.bib22" title="" class="ltx_ref">2015</a>; Eysenbach et al., <a href="#bib.bib11" title="" class="ltx_ref">2017</a>)</cite> by learning a backward controller to retrieve the initial state distribution <math id="S4.SS1.p1.m6" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math>. While the initial state distribution cannot be changed in the episodic setting, <math id="S4.SS1.p1.m7" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> does not have any restriction to match <math id="S4.SS1.p1.m8" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math> in the autonomous RL setting. Is there a better initial state distribution to efficiently learn <math id="S4.SS1.p1.m9" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> from?</p>
+</div>
+<div id="S4.SS1.p2" class="ltx_para">
+<p class="ltx_p">Interestingly, <cite class="ltx_cite ltx_citemacro_citet">Kakade &amp; Langford (<a href="#bib.bib26" title="" class="ltx_ref">2002</a>)</cite> provide a theoretical discussion on how the initial state distribution affects the performance. The main idea is that learning an optimal policy often requires policy improvement at states that are unlikely to be visited. Creating a more uniform starting state distribution can accelerate policy improvement by encouraging policy improvement at those unlikely states. The formal statement can be found in <cite class="ltx_cite ltx_citemacro_citep">(Kakade &amp; Langford, <a href="#bib.bib26" title="" class="ltx_ref">2002</a>, Corollary 4.5)</cite>. Informally, the result states that the upper bound on the difference between the optimal performance and that of policy <math id="S4.SS1.p2.m1" class="ltx_Math" alttext="\pi" display="inline"><mi>π</mi></math> is proportional to <math id="S4.SS1.p2.m2" class="ltx_Math" alttext="\lVert\frac{\rho^{*}(s)}{\mu}\rVert_{\infty}" display="inline"><msub><mrow><mo fence="true" rspace="0em">∥</mo><mfrac><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow><mi>μ</mi></mfrac><mo fence="true" lspace="0em">∥</mo></mrow><mi mathvariant="normal">∞</mi></msub></math>, where <math id="S4.SS1.p2.m3" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math> is the state distribution of the optimal policy and <math id="S4.SS1.p2.m4" class="ltx_Math" alttext="\mu" display="inline"><mi>μ</mi></math> is the initial state distribution. This suggests that an initial state distribution <math id="S4.SS1.p2.m5" class="ltx_Math" alttext="\mu" display="inline"><mi>μ</mi></math> that is close to the optimal state distribution <math id="S4.SS1.p2.m6" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math> would enable efficient learning. Intuitively, some initial states in the optimal state distribution would simplify the exploration by being closer to high reward states, which can be bootstrapped upon to learn faster from the harder initial states. To empirically verify the theoretical results, we compare the learning speed of RL algorithm in the episodic setting on <span class="ltx_text ltx_font_italic">tabletop organization</span> (environment details in Section <a href="#S5" title="5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5</span></a>) when starting from (a) the standard initial state distribution, that is <math id="S4.SS1.p2.m7" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math>, versus (b) states sampled from the stationary distribution of the optimal policy, that is <math id="S4.SS1.p2.m8" class="ltx_Math" alttext="s_{0}\sim\rho^{*}(s)" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></math>. We find in Figure <a href="#S4.F2" title="Figure 2 ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">2</span></a> that the latter not only improves the learning speed, but also improves the performance by nearly 18%.</p>
+</div>
+</section>
+<section id="S4.SS2" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">4.2 </span>Resetting to Match the Expert State Distribution</h3>
+
+<div id="S4.SS2.p1" class="ltx_para">
+<p class="ltx_p">The theoretical and empirical results in the previous section suggest that <math id="S4.SS2.p1.m1" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> should attempt to solve the task from an initial state distribution that is close to <math id="S4.SS2.p1.m2" class="ltx_Math" alttext="\rho^{*}(s)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>, thus implying that <math id="S4.SS2.p1.m3" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> should try to match <math id="S4.SS2.p1.m4" class="ltx_Math" alttext="\rho^{*}(s)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>.
+How do we match <math id="S4.SS2.p1.m5" class="ltx_Math" alttext="\rho^{b}" display="inline"><msup><mi>ρ</mi><mi>b</mi></msup></math> to <math id="S4.SS2.p1.m6" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math>? We will assume access to a small set of samples from <math id="S4.SS2.p1.m7" class="ltx_Math" alttext="\rho^{*}(s)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> in the form of demonstrations <math id="S4.SS2.p1.m8" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>. Because we are limited to sampling <math id="S4.SS2.p1.m9" class="ltx_Math" alttext="\rho^{b}" display="inline"><msup><mi>ρ</mi><mi>b</mi></msup></math> and only have a fixed set of samples from <math id="S4.SS2.p1.m10" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math>, we consider the following optimization problem:</p>
+<table id="S4.E3" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="S4.E3.m1" class="ltx_Math" alttext="\min_{\pi_{b}}\max_{C}\mathbb{E}_{s\sim\rho^{*}}\big{[}\log C(s)\big{]}+%
+\mathbb{E}_{s\sim\rho^{b}}\big{[}\log(1-C(s))\big{]}" display="block"><mrow><mrow><mrow><munder><mi>min</mi><msub><mi>π</mi><mi>b</mi></msub></munder><mo lspace="0.167em">⁡</mo><mrow><munder><mi>max</mi><mi>C</mi></munder><mo lspace="0.167em">⁡</mo><msub><mi>𝔼</mi><mrow><mi>s</mi><mo>∼</mo><msup><mi>ρ</mi><mo>*</mo></msup></mrow></msub></mrow></mrow><mo>⁢</mo><mrow><mo maxsize="120%" minsize="120%">[</mo><mrow><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mi>C</mi></mrow><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow><mo maxsize="120%" minsize="120%">]</mo></mrow></mrow><mo>+</mo><mrow><msub><mi>𝔼</mi><mrow><mi>s</mi><mo>∼</mo><msup><mi>ρ</mi><mi>b</mi></msup></mrow></msub><mo>⁢</mo><mrow><mo maxsize="120%" minsize="120%">[</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo maxsize="120%" minsize="120%">]</mo></mrow></mrow></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+<td rowspan="1" class="ltx_eqn_cell ltx_eqn_eqno ltx_align_middle ltx_align_right"><span class="ltx_tag ltx_tag_equation ltx_align_right">(3)</span></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="S4.SS2.p1.m11" class="ltx_Math" alttext="C:\mathcal{S}\mapsto[0,1]" display="inline"><mrow><mi>C</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mi class="ltx_font_mathcaligraphic">𝒮</mi><mo stretchy="false">↦</mo><mrow><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></mrow></mrow></math> is a state-space classifier. This optimization is very much reminiscent of implicit distribution matching techniques used in <cite class="ltx_cite ltx_citemacro_citep">(Goodfellow et al., <a href="#bib.bib17" title="" class="ltx_ref">2014</a>; Nowozin et al., <a href="#bib.bib33" title="" class="ltx_ref">2016</a>; Ho &amp; Ermon, <a href="#bib.bib25" title="" class="ltx_ref">2016</a>; Ghasemipour et al., <a href="#bib.bib15" title="" class="ltx_ref">2020</a>)</cite> when only the samples are available and densities cannot be explicitly measured.
+This can be interpreted as minimizing the Jensen-Shannon divergence <math id="S4.SS2.p1.m12" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{b}\mid\mid\rho^{*})" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>b</mi></msup><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mo stretchy="false">)</mo></mrow></mrow></math>.
+Following these prior works, <math id="S4.SS2.p1.m13" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> solves a binary classification where <math id="S4.SS2.p1.m14" class="ltx_Math" alttext="s\sim\rho^{*}" display="inline"><mrow><mi>s</mi><mo>∼</mo><msup><mi>ρ</mi><mo>*</mo></msup></mrow></math> has a label <math id="S4.SS2.p1.m15" class="ltx_Math" alttext="1" display="inline"><mn>1</mn></math> and <math id="S4.SS2.p1.m16" class="ltx_Math" alttext="s\sim\rho^{b}" display="inline"><mrow><mi>s</mi><mo>∼</mo><msup><mi>ρ</mi><mi>b</mi></msup></mrow></math> has a label <math id="S4.SS2.p1.m17" class="ltx_Math" alttext="0" display="inline"><mn>0</mn></math>. Further, <math id="S4.SS2.p1.m18" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> solves a RL problem to maximize <math id="S4.SS2.p1.m19" class="ltx_Math" alttext="{\mathbb{E}_{s\sim\rho^{b}}[r(s,a)]}" display="inline"><mrow><msub><mi>𝔼</mi><mrow><mi>s</mi><mo>∼</mo><msup><mi>ρ</mi><mi>b</mi></msup></mrow></msub><mo>⁢</mo><mrow><mo stretchy="false">[</mo><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">]</mo></mrow></mrow></math>, where the reward function <math id="S4.SS2.p1.m20" class="ltx_Math" alttext="r(s,a)=-\log(1-C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></math>. Assuming sufficiently expressive non-parametric function classes, <math id="S4.SS2.p1.m21" class="ltx_Math" alttext="(\rho^{*},0.5)" display="inline"><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mo>*</mo></msup><mo>,</mo><mn>0.5</mn><mo stretchy="false">)</mo></mrow></math> is a saddle point for the optimization in Equation <a href="#S4.E3" title="3 ‣ 4.2 Resetting to Match the Expert State Distribution ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">3</span></a>.</p>
+</div>
+<div id="S4.SS2.p2" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Relationship to Prior Imitation Learning Methods.</span> GAIL <cite class="ltx_cite ltx_citemacro_citep">(Ho &amp; Ermon, <a href="#bib.bib25" title="" class="ltx_ref">2016</a>)</cite> proposes to match the state-action distribution <math id="S4.SS2.p2.m1" class="ltx_Math" alttext="\rho^{\pi}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mi>π</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> to that of the expert <math id="S4.SS2.p2.m2" class="ltx_Math" alttext="\rho^{*}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math>, that is minimize <math id="S4.SS2.p2.m3" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s,a)\mid\mid\rho^{*}(s,a))" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>π</mi></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math>. Prior works have considered the problem of imitation learning when state-only observations are available <cite class="ltx_cite ltx_citemacro_citep">(Torabi et al., <a href="#bib.bib42" title="" class="ltx_ref">2019</a>; Zhu et al., <a href="#bib.bib47" title="" class="ltx_ref">2020b</a>)</cite> by minimizing <math id="S4.SS2.p2.m4" class="ltx_math_unparsed" alttext="\mathcal{D}_{f}(\rho^{\pi}(s,s^{\prime})\mid\mid\rho^{*}(s,s^{\prime}))" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>π</mi></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><msup><mi>s</mi><mo>′</mo></msup><mo stretchy="false">)</mo></mrow><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><msup><mi>s</mi><mo>′</mo></msup><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math>, where <math id="S4.SS2.p2.m5" class="ltx_Math" alttext="f" display="inline"><mi>f</mi></math>-divergence enables generalized treatment of different discrepancy measures such KL-divergence of JS-divergence used in prior work <cite class="ltx_cite ltx_citemacro_citep">(Nowozin et al., <a href="#bib.bib33" title="" class="ltx_ref">2016</a>)</cite>.
+In contrast to these works, our work proposes to minimize <math id="S4.SS2.p2.m6" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{\pi}(s)\mid\mid\rho^{*}(s))" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>π</mi></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math>. Furthermore, state distribution matching is only used for the backward policy in our algorithm, whereas the forward policy is maximizing return, as we summarize in the next section. Finally, unlike prior works, the motivation for matching the state distributions is to create an effective initial state distribution for the forward policy <math id="S4.SS2.p2.m7" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math>. Our experimental results in Section <a href="#S5.SS2" title="5.2 Imitation Learning ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5.2</span></a> suggest that naively extending GAIL to non-episodic settings is not effective, validating the importance of these key differences.</p>
+</div>
+<figure id="alg1" class="ltx_float ltx_float_algorithm ltx_framed_top">
+<figcaption class="ltx_caption"><span class="ltx_tag ltx_tag_float"><span class="ltx_text ltx_font_bold">Algorithm 1</span> </span> Matching Expert Distributions for Autonomous Learning (MEDAL)</figcaption>
+<div class="ltx_listing ltx_listing">
+<div id="alg1.l1" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">require:</span> forward demos <math id="alg1.l1.m1" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>;
+
+</div>
+<div id="alg1.l2" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">optional:</span> backward demos <math id="alg1.l2.m1" class="ltx_Math" alttext="\mathcal{D}_{b}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>b</mi></msub></math>;
+
+</div>
+<div id="alg1.l3" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">initialize:</span> <math id="alg1.l3.m1" class="ltx_Math" alttext="\mathcal{R}_{f},\pi_{f}(a\mid s),Q^{\pi_{f}}(s,a)" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>f</mi></msub><mo>,</mo><mrow><msub><mi>π</mi><mi>f</mi></msub><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mrow><mi>a</mi><mo>∣</mo><mi>s</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>,</mo><mrow><msup><mi>Q</mi><msub><mi>π</mi><mi>f</mi></msub></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></math>; <span class="ltx_text" style="color:#808000;">// forward policy</span>
+
+</div>
+<div id="alg1.l4" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">initialize:</span> <math id="alg1.l4.m1" class="ltx_Math" alttext="\mathcal{R}_{b},\pi_{b}(a\mid s),Q^{\pi_{b}}(s,a)" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub><mo>,</mo><mrow><msub><mi>π</mi><mi>b</mi></msub><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mrow><mi>a</mi><mo>∣</mo><mi>s</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>,</mo><mrow><msup><mi>Q</mi><msub><mi>π</mi><mi>b</mi></msub></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></math>; <span class="ltx_text" style="color:#808000;">// backward policy</span>
+
+</div>
+<div id="alg1.l5" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">initialize:</span> <math id="alg1.l5.m1" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>; <span class="ltx_text" style="color:#808000;">// state-space discriminator</span>
+
+</div>
+<div id="alg1.l6" class="ltx_listingline">  <math id="alg1.l6.m1" class="ltx_Math" alttext="\mathcal{R}_{f}\leftarrow\mathcal{R}_{f}\cup\mathcal{D}_{f},\mathcal{R}_{b}%
+\leftarrow\mathcal{R}_{b}\cup\mathcal{D}_{b}" display="inline"><mrow><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>f</mi></msub><mo stretchy="false">←</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>f</mi></msub><mo>∪</mo><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></mrow></mrow><mo>,</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub><mo stretchy="false">←</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub><mo>∪</mo><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>b</mi></msub></mrow></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l7" class="ltx_listingline">  <math id="alg1.l7.m1" class="ltx_Math" alttext="s\sim\rho_{0}" display="inline"><mrow><mi>s</mi><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math>; <span class="ltx_text" style="color:#808000;"> // sample initial state</span>
+
+</div>
+<div id="alg1.l8" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">while</span> not done <span class="ltx_text ltx_font_bold">do</span>
+
+
+
+</div>
+<div id="alg1.l9" class="ltx_listingline">     <span class="ltx_text" style="color:#808000;">// run forward policy for a fixed number of steps or until goal is reached, otherwise run backward policy</span>
+
+</div>
+<div id="alg1.l10" class="ltx_listingline">     <span class="ltx_text ltx_font_bold">if</span> forward <span class="ltx_text ltx_font_bold">then</span>
+
+
+
+</div>
+<div id="alg1.l11" class="ltx_listingline">        <math id="alg1.l11.m1" class="ltx_math_unparsed" alttext="a\sim\pi_{f}(\cdot\mid s)" display="inline"><mrow><mi>a</mi><mo>∼</mo><msub><mi>π</mi><mi>f</mi></msub><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l12" class="ltx_listingline">        <math id="alg1.l12.m1" class="ltx_math_unparsed" alttext="s^{\prime}\sim p(\cdot\mid s,a),r\leftarrow r(s,a)" display="inline"><mrow><msup><mi>s</mi><mo>′</mo></msup><mo>∼</mo><mi>p</mi><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo>,</mo><mi>r</mi><mo stretchy="false">←</mo><mi>r</mi><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l13" class="ltx_listingline">        <math id="alg1.l13.m1" class="ltx_Math" alttext="\mathcal{R}_{f}\leftarrow\mathcal{R}_{f}\cup\{(s,a,s^{\prime},r)\}" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>f</mi></msub><mo stretchy="false">←</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>f</mi></msub><mo>∪</mo><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo>,</mo><msup><mi>s</mi><mo>′</mo></msup><mo>,</mo><mi>r</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l14" class="ltx_listingline">        update <math id="alg1.l14.m1" class="ltx_Math" alttext="\pi_{f},Q^{\pi_{f}}" display="inline"><mrow><msub><mi>π</mi><mi>f</mi></msub><mo>,</mo><msup><mi>Q</mi><msub><mi>π</mi><mi>f</mi></msub></msup></mrow></math>;
+
+</div>
+<div id="alg1.l15" class="ltx_listingline">     <span class="ltx_text ltx_font_bold">else</span>
+
+
+</div>
+<div id="alg1.l16" class="ltx_listingline">        <math id="alg1.l16.m1" class="ltx_math_unparsed" alttext="a\sim\pi_{b}(\cdot\mid s)" display="inline"><mrow><mi>a</mi><mo>∼</mo><msub><mi>π</mi><mi>b</mi></msub><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l17" class="ltx_listingline">        <math id="alg1.l17.m1" class="ltx_math_unparsed" alttext="s^{\prime}\sim p(\cdot\mid s,a),r\leftarrow-\log(1-C(s^{\prime}))" display="inline"><mrow><msup><mi>s</mi><mo>′</mo></msup><mo>∼</mo><mi>p</mi><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo lspace="0em" rspace="0.167em">∣</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow><mo>,</mo><mi>r</mi><mo rspace="0em" stretchy="false">←</mo><mo lspace="0em">−</mo><mi>log</mi><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>C</mi><mrow><mo stretchy="false">(</mo><msup><mi>s</mi><mo>′</mo></msup><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l18" class="ltx_listingline">        <math id="alg1.l18.m1" class="ltx_Math" alttext="\mathcal{R}_{b}\leftarrow\mathcal{R}_{b}\cup\{(s,a,s^{\prime},r)\}" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub><mo stretchy="false">←</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub><mo>∪</mo><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo>,</mo><msup><mi>s</mi><mo>′</mo></msup><mo>,</mo><mi>r</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l19" class="ltx_listingline">        update <math id="alg1.l19.m1" class="ltx_Math" alttext="\pi_{b},Q^{\pi_{b}}" display="inline"><mrow><msub><mi>π</mi><mi>b</mi></msub><mo>,</mo><msup><mi>Q</mi><msub><mi>π</mi><mi>b</mi></msub></msup></mrow></math>;
+
+</div>
+<div id="alg1.l20" class="ltx_listingline">     <span class="ltx_text ltx_font_bold">end</span> <span class="ltx_text ltx_font_bold">if</span>
+</div>
+<div id="alg1.l21" class="ltx_listingline">     <span class="ltx_text" style="color:#808000;"> // train disriminator every <math id="alg1.l21.m1" class="ltx_Math" alttext="K" display="inline"><mi mathcolor="#808000">K</mi></math> steps</span>
+
+</div>
+<div id="alg1.l22" class="ltx_listingline">     <span class="ltx_text ltx_font_bold">if</span> train-discriminator <span class="ltx_text ltx_font_bold">then</span>
+
+
+
+</div>
+<div id="alg1.l23" class="ltx_listingline">        <span class="ltx_text" style="color:#808000;"> // sample a batch of positives <math id="alg1.l23.m1" class="ltx_Math" alttext="S_{p}" display="inline"><msub><mi mathcolor="#808000">S</mi><mi mathcolor="#808000">p</mi></msub></math> from the forward demos <math id="alg1.l23.m2" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic" mathcolor="#808000">𝒟</mi><mi mathcolor="#808000">f</mi></msub></math>, and a batch of negatives <math id="alg1.l23.m3" class="ltx_Math" alttext="S_{n}" display="inline"><msub><mi mathcolor="#808000">S</mi><mi mathcolor="#808000">n</mi></msub></math> from backward replay buffer <math id="alg1.l23.m4" class="ltx_Math" alttext="\mathcal{R}_{b}" display="inline"><msub><mi class="ltx_font_mathcaligraphic" mathcolor="#808000">ℛ</mi><mi mathcolor="#808000">b</mi></msub></math></span>
+
+</div>
+<div id="alg1.l24" class="ltx_listingline">        <math id="alg1.l24.m1" class="ltx_Math" alttext="S_{p}\sim\mathcal{D}_{f},S_{n}\sim\mathcal{R}_{b}" display="inline"><mrow><mrow><msub><mi>S</mi><mi>p</mi></msub><mo>∼</mo><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></mrow><mo>,</mo><mrow><msub><mi>S</mi><mi>n</mi></msub><mo>∼</mo><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>b</mi></msub></mrow></mrow></math>;
+
+</div>
+<div id="alg1.l25" class="ltx_listingline">        update <math id="alg1.l25.m1" class="ltx_Math" alttext="C" display="inline"><mi>C</mi></math> on <math id="alg1.l25.m2" class="ltx_Math" alttext="S_{p}\cup S_{n}" display="inline"><mrow><msub><mi>S</mi><mi>p</mi></msub><mo>∪</mo><msub><mi>S</mi><mi>n</mi></msub></mrow></math>;
+
+</div>
+<div id="alg1.l26" class="ltx_listingline">     <span class="ltx_text ltx_font_bold">end</span> <span class="ltx_text ltx_font_bold">if</span>
+</div>
+<div id="alg1.l27" class="ltx_listingline">     <math id="alg1.l27.m1" class="ltx_Math" alttext="s\leftarrow s^{\prime}" display="inline"><mrow><mi>s</mi><mo stretchy="false">←</mo><msup><mi>s</mi><mo>′</mo></msup></mrow></math>;
+
+</div>
+<div id="alg1.l28" class="ltx_listingline">  <span class="ltx_text ltx_font_bold">end</span> <span class="ltx_text ltx_font_bold">while</span>
+</div>
+</div>
+</figure>
+</section>
+<section id="S4.SS3" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">4.3 </span>MEDAL Overview</h3>
+
+<div id="S4.SS3.p1" class="ltx_para">
+<p class="ltx_p">With these components in place, we now summarize our proposed algorithm, <em class="ltx_emph ltx_font_italic">Matching Expert Distributions for Autonomous Learning</em> (MEDAL). We simultaneously learn the following components: a <em class="ltx_emph ltx_font_italic">forward policy</em> that learns to solve the task and will also be used for evaluation, a <span class="ltx_text ltx_font_italic">backward policy</span> that learns creates the initial state distribution for the forward policy by matching the state distribution in the demonstrations, and finally a <span class="ltx_text ltx_font_italic">state-space discriminator</span> that learns to distinguish between the states visited by the backward policy and the states visited in the demonstrations. MEDAL assumes access to a set of forward demonstrations <math id="S4.SS3.p1.m1" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>, completing the task from the initial state distribution, and optionally, a set of backward demonstrations <math id="S4.SS3.p1.m2" class="ltx_Math" alttext="\mathcal{D}_{b}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>b</mi></msub></math> undoing the task back to the initial state distribution. The forward policy <math id="S4.SS3.p1.m3" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> is trained to maximize <math id="S4.SS3.p1.m4" class="ltx_Math" alttext="\mathbb{E}[{\sum_{t=0}^{\infty}\gamma^{t}r(s_{t},a_{t})}]" display="inline"><mrow><mi>𝔼</mi><mo>⁢</mo><mrow><mo stretchy="false">[</mo><mrow><msubsup><mo lspace="0em">∑</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant="normal">∞</mi></msubsup><mrow><msup><mi>γ</mi><mi>t</mi></msup><mo>⁢</mo><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>s</mi><mi>t</mi></msub><mo>,</mo><msub><mi>a</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">]</mo></mrow></mrow></math> and the replay buffer for the forward policy is initialized using <math id="S4.SS3.p1.m5" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>. The backward policy <math id="S4.SS3.p1.m6" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> trains to minimize <math id="S4.SS3.p1.m7" class="ltx_math_unparsed" alttext="{\mathcal{D}_{\textrm{JS}}(\rho^{b}(s)\mid\mid\rho^{*}(s))}" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>b</mi></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow></mrow></math> which translates into maximizing <math id="S4.SS3.p1.m8" class="ltx_Math" alttext="{-\mathbb{E}[\sum_{t=0}^{\infty}\gamma^{t}\log(1-C(s_{t+1}))]}" display="inline"><mrow><mo>−</mo><mrow><mi>𝔼</mi><mo>⁢</mo><mrow><mo stretchy="false">[</mo><mrow><msubsup><mo lspace="0em">∑</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant="normal">∞</mi></msubsup><mrow><msup><mi>γ</mi><mi>t</mi></msup><mo lspace="0.167em">⁢</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>s</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><mo stretchy="false">]</mo></mrow></mrow></mrow></math> and the replay buffer for the backward policy is initialized using the backward demonstrations <math id="S4.SS3.p1.m9" class="ltx_Math" alttext="\mathcal{D}_{b}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>b</mi></msub></math>, if available. Finally, the state-space discriminator <math id="S4.SS3.p1.m10" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> trains to classify states sampled from the <span class="ltx_text ltx_font_italic">forward</span> demonstrations <math id="S4.SS3.p1.m11" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math> with label <math id="S4.SS3.p1.m12" class="ltx_Math" alttext="1" display="inline"><mn>1</mn></math> and states visited by <math id="S4.SS3.p1.m13" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> as label <math id="S4.SS3.p1.m14" class="ltx_Math" alttext="0" display="inline"><mn>0</mn></math>. Note, we are trying to match the state marginal of policy <math id="S4.SS3.p1.m15" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> (i.e. <math id="S4.SS3.p1.m16" class="ltx_Math" alttext="\rho^{b}(s)" display="inline"><mrow><msup><mi>ρ</mi><mi>b</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>) to the optimal state distribution <math id="S4.SS3.p1.m17" class="ltx_Math" alttext="\rho^{*}(s)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> (approximated via <span class="ltx_text ltx_font_italic">forward demonstrations</span> <math id="S4.SS3.p1.m18" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>, not <span class="ltx_text ltx_font_italic">backward demonstrations</span>), thereby motivating the classification problem for <math id="S4.SS3.p1.m19" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>.</p>
+</div>
+<div id="S4.SS3.p2" class="ltx_para">
+<p class="ltx_p">When interacting with the environment during training, we alternate between collecting samples using <math id="S4.SS3.p2.m1" class="ltx_Math" alttext="\pi_{f}" display="inline"><msub><mi>π</mi><mi>f</mi></msub></math> for a fixed number of steps and collecting samples using <math id="S4.SS3.p2.m2" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> for a fixed number of steps. The policies can be updated using any RL algorithm. The state-space discriminator <math id="S4.SS3.p2.m3" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> is updated every <math id="S4.SS3.p2.m4" class="ltx_Math" alttext="K" display="inline"><mi>K</mi></math> steps collected in the environment, with the states visited by <math id="S4.SS3.p2.m5" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> being labeled as <math id="S4.SS3.p2.m6" class="ltx_Math" alttext="0" display="inline"><mn>0</mn></math> and states in <math id="S4.SS3.p2.m7" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math> labeled as <math id="S4.SS3.p2.m8" class="ltx_Math" alttext="1" display="inline"><mn>1</mn></math>. The minibatch for updating the parameters of <math id="S4.SS3.p2.m9" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> is balanced to ensure equal samples from <math id="S4.SS3.p2.m10" class="ltx_Math" alttext="\rho^{*}(s)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> and <math id="S4.SS3.p2.m11" class="ltx_Math" alttext="\rho^{b}(s)" display="inline"><mrow><msup><mi>ρ</mi><mi>b</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math>. The pseudocode for MEDAL is provided in Algorithm <a href="#alg1" title="Algorithm 1 ‣ 4.2 Resetting to Match the Expert State Distribution ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">1</span></a>, and further implementation details can be found in Appendix <a href="#A1" title="Appendix A MEDAL Implementation ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">A</span></a>.
+</p>
+</div>
+<figure id="S4.F3" class="ltx_figure">
+<div class="ltx_flex_figure">
+
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/tabletop.png" id="S4.F3.g1" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="175" height="114" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/sawyerdoor.png" id="S4.F3.g2" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="199" height="114" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/sawyerpeg.png" id="S4.F3.g3" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_square" width="121" height="114" alt="Refer to caption"></div>
+</div>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 3: </span>Continuous-control environments from the EARL benchmark: (<em class="ltx_emph ltx_font_italic">left</em>) Table-top organization (<span class="ltx_text ltx_font_bold">TO</span>) where a gripper is tasked with moving a mug to one of the four goal locations, (<em class="ltx_emph ltx_font_italic">center</em>) sawyer door closing (<span class="ltx_text ltx_font_bold">SD</span>) where the sawyer robot is tasked with closing the door, (<em class="ltx_emph ltx_font_italic">right</em>) sawyer peg insertion (<span class="ltx_text ltx_font_bold">SP</span>) where the robot is tasked with picking up the peg and inserting into the goal location.</figcaption>
+</figure>
+</section>
+</section>
+<section id="S5" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">5 </span>Experiments</h2>
+
+<div id="S5.p1" class="ltx_para">
+<p class="ltx_p">In this section, we empirically analyze the performance of MEDAL to answer to following questions: (1) How does MEDAL compare to other non-episodic, autonomous RL methods? (2) Given the demonstrations, can existing imitation learning methods suffice? (3) How important is it for the backward controller to match the entire state distribution, instead of just the initial state distribution?</p>
+</div>
+<div id="S5.p2" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Environments.</span> To analyze these questions, we consider three sparse-reward continuous-control environments from the EARL benchmark <cite class="ltx_cite ltx_citemacro_citep">(Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>.
+The <em class="ltx_emph ltx_font_italic">table-top organization</em> is a simplified manipulation environment where a gripper is tasked to move the mug to one of four coasters.
+The <em class="ltx_emph ltx_font_italic">sawyer door closing</em> environment requires a sawyer robot arm to learn how to close a door starting from various initial positions. The challenge in the ARL setting arises from the fact that the agent has to open the door to practice closing it again. Finally, the <em class="ltx_emph ltx_font_italic">sawyer peg insertion</em> environment requires the sawyer robot arm to pick up a peg and insert it into a designated goal location. This is a particularly challenging environment as the autonomously operating robot can push the peg into places where it can be hard to retrieve it back, a problem that is not encountered in the episodic setting as the environment is reset to the initial state distribution every few hundred steps.</p>
+</div>
+<div id="S5.p3" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Evaluation</span>. We follow the evaluation protocol laid down in the EARL benchmark. All algorithms are reset to a state <math id="S5.p3.m1" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math> and interact with their environments almost fully autonomously thereon, only being reset to an initial state intermittently after several hundreds of thousands of steps of interaction. Since our objective is to acquire task policies in a sample efficient way, we will focus on <span class="ltx_text ltx_font_italic">deployed policy evaluation</span>. Specifically, we approximate <math id="S5.p3.m2" class="ltx_Math" alttext="J(\pi_{t})=\mathbb{E}[\sum_{t=0}^{\infty}\gamma^{t}r(s_{t},a_{t})]" display="inline"><mrow><mrow><mi>J</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>π</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝔼</mi><mo>⁢</mo><mrow><mo stretchy="false">[</mo><mrow><msubsup><mo lspace="0em">∑</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant="normal">∞</mi></msubsup><mrow><msup><mi>γ</mi><mi>t</mi></msup><mo>⁢</mo><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><msub><mi>s</mi><mi>t</mi></msub><mo>,</mo><msub><mi>a</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">]</mo></mrow></mrow></mrow></math> by averaging the return of the policy over <math id="S5.p3.m3" class="ltx_Math" alttext="10" display="inline"><mn>10</mn></math> episodes starting from <math id="S5.p3.m4" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math>, every <math id="S5.p3.m5" class="ltx_Math" alttext="10,000" display="inline"><mrow><mn>10</mn><mo>,</mo><mn>000</mn></mrow></math> steps collected in the training environment. Note, the trajectories collected for evaluation are <span class="ltx_text ltx_font_italic">not</span> provided to the learning algorithm <math id="S5.p3.m6" class="ltx_Math" alttext="\mathbb{A}" display="inline"><mi>𝔸</mi></math>. For all considered environments, the reward functions are sparse in nature and correspondingly, EARL provides a small set of demonstrations to the algorithms, that correspond to doing and undoing the task (a total of <math id="S5.p3.m7" class="ltx_Math" alttext="10" display="inline"><mn>10</mn></math>-<math id="S5.p3.m8" class="ltx_Math" alttext="30" display="inline"><mn>30</mn></math> demonstrations depending on the environment). Environment specific details such as reward functions and intermittent resets can be found in Appendix <a href="#A2" title="Appendix B Environments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">B</span></a>.</p>
+</div>
+<section id="S5.SS1" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">5.1 </span>Benchmarking MEDAL on EARL</h3>
+
+<figure id="S5.T1" class="ltx_table">
+<table class="ltx_tabular ltx_centering ltx_guessed_headers ltx_align_middle">
+<thead class="ltx_thead">
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column ltx_th_row ltx_border_r ltx_border_tt"><span class="ltx_text ltx_font_bold">Method</span></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column ltx_border_tt"><span class="ltx_text ltx_font_bold">Tabletop</span></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column ltx_border_tt"><span class="ltx_text ltx_font_bold">Sawyer</span></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column ltx_border_tt"><span class="ltx_text ltx_font_bold">Sawyer</span></th>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_th ltx_th_column ltx_th_row ltx_border_r"></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column"><span class="ltx_text ltx_font_bold">Organization</span></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column"><span class="ltx_text ltx_font_bold">Door</span></th>
+<th class="ltx_td ltx_align_center ltx_th ltx_th_column"><span class="ltx_text ltx_font_bold">Peg</span></th>
+</tr>
+</thead>
+<tbody class="ltx_tbody">
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_r ltx_border_t"><em class="ltx_emph ltx_font_italic">naïve RL</em></th>
+<td class="ltx_td ltx_align_center ltx_border_t">0.32 (0.17)</td>
+<td class="ltx_td ltx_align_center ltx_border_t">0.00 (0.00)</td>
+<td class="ltx_td ltx_align_center ltx_border_t">0.00 (0.00)</td>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_r"><em class="ltx_emph ltx_font_italic">FBRL</em></th>
+<td class="ltx_td ltx_align_center">0.94 (0.04)</td>
+<td class="ltx_td ltx_align_center"><span class="ltx_text ltx_font_bold">1.00 (0.00)</span></td>
+<td class="ltx_td ltx_align_center">0.00 (0.00)</td>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_r"><em class="ltx_emph ltx_font_italic">R3L</em></th>
+<td class="ltx_td ltx_align_center">0.96 (0.04)</td>
+<td class="ltx_td ltx_align_center">0.54 (0.18)</td>
+<td class="ltx_td ltx_align_center">0.00 (0.00)</td>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_r"><em class="ltx_emph ltx_font_italic">VaPRL</em></th>
+<td class="ltx_td ltx_align_center"><span class="ltx_text ltx_font_bold">0.98 (0.02)</span></td>
+<td class="ltx_td ltx_align_center">0.94 (0.05)</td>
+<td class="ltx_td ltx_align_center">0.00 (0.00)</td>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_r"><em class="ltx_emph ltx_font_italic">MEDAL</em></th>
+<td class="ltx_td ltx_align_center"><span class="ltx_text ltx_font_bold">0.98 (0.02)</span></td>
+<td class="ltx_td ltx_align_center"><span class="ltx_text ltx_font_bold">1.00 (0.00)</span></td>
+<td class="ltx_td ltx_align_center"><span class="ltx_text ltx_font_bold">0.40 (0.16)</span></td>
+</tr>
+<tr class="ltx_tr">
+<th class="ltx_td ltx_align_center ltx_th ltx_th_row ltx_border_bb ltx_border_r ltx_border_t"><em class="ltx_emph ltx_font_italic">oracle RL</em></th>
+<td class="ltx_td ltx_align_center ltx_border_bb ltx_border_t">0.80 (0.11)</td>
+<td class="ltx_td ltx_align_center ltx_border_bb ltx_border_t">1.00 (0.00)</td>
+<td class="ltx_td ltx_align_center ltx_border_bb ltx_border_t">1.00 (0.00)</td>
+</tr>
+</tbody>
+</table>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_table">Table 1: </span>Average return of the final learned policy. Performance is averaged over 5 random seeds. The mean and and the standard error are reported, with the best performing entry in bold. For all domains, <math id="S5.T1.m3" class="ltx_Math" alttext="1.0" display="inline"><mn>1.0</mn></math> indicates the maximum performance and <math id="S5.T1.m4" class="ltx_Math" alttext="0.0" display="inline"><mn>0.0</mn></math> indicates minimum performance.</figcaption>
+</figure>
+<div id="S5.SS1.p1" class="ltx_para">
+<p class="ltx_p">First, we benchmark our proposed method MEDAL on the aforementioned EARL environments against state-of-the-art non-episodic ARL methods.</p>
+</div>
+<div id="S5.SS1.p2" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Comparisons.</span> We briefly review the methods benchmarked on EARL, which MEDAL will be compared against: (1) forward-backward RL (<span class="ltx_text ltx_font_bold">FBRL</span>) <cite class="ltx_cite ltx_citemacro_citep">(Han et al., <a href="#bib.bib22" title="" class="ltx_ref">2015</a>; Eysenbach et al., <a href="#bib.bib11" title="" class="ltx_ref">2017</a>)</cite>, where the backward policy recovers the initial state distribution; (2) value-accelerated persistent RL (<span class="ltx_text ltx_font_bold">VaPRL</span>) <cite class="ltx_cite ltx_citemacro_citep">(Sharma et al., <a href="#bib.bib38" title="" class="ltx_ref">2021</a>)</cite>, where the backward policy creates a curriculum based on the forward policy’s performance; (3) <span class="ltx_text ltx_font_bold">R3L</span> <cite class="ltx_cite ltx_citemacro_citep">(Zhu et al., <a href="#bib.bib46" title="" class="ltx_ref">2020a</a>)</cite> has a backward policy that optimizes a state-novelty reward <cite class="ltx_cite ltx_citemacro_citep">(Burda et al., <a href="#bib.bib6" title="" class="ltx_ref">2018</a>)</cite> to encourage the forward policy to solve the tasks from new states in every trial; (4) <span class="ltx_text ltx_font_bold">naïve RL</span> represents the episodic RL approach where only a forward policy optimizes the task-reward throughout training; and finally (5) <span class="ltx_text ltx_font_bold">oracle RL</span> is the same episodic RL baseline but operating in the episodic setting. For a fair comparison, the forward policy for all baselines use SAC <cite class="ltx_cite ltx_citemacro_citep">(Haarnoja et al., <a href="#bib.bib21" title="" class="ltx_ref">2018</a>)</cite>, and the replay buffer is always initialized with the forward demonstrations. Further, the replay buffers for backward policies in <span class="ltx_text ltx_font_bold">FBRL, VaPRL</span> is also initialized with the backward demos. The replay buffer of the backward policy in R3L is not initialized with backward demos as it will reduce the novelty of the states in the backward demos for the RND reward without the backward policy ever visiting those states.</p>
+</div>
+<figure id="S5.F4" class="ltx_figure">
+<div class="ltx_flex_figure">
+
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/tabletop_transfer.png" id="S5.F4.g1" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="192" height="145" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/sawyer_door_transfer.png" id="S5.F4.g2" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="180" height="143" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/sawyer_peg_transfer.png" id="S5.F4.g3" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="180" height="144" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/legend.png" id="S5.F4.g4" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="359" height="15" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+</div>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 4: </span>Performance of each method on (<span class="ltx_text ltx_font_italic">left</span>) the table-top organization environment, (<span class="ltx_text ltx_font_italic">center</span>) the sawyer door closing environment, and (<span class="ltx_text ltx_font_italic">right</span>) the sawyer peg environment. Plots show learning curves with mean and standard error over 5 random seeds.</figcaption>
+</figure>
+<div id="S5.SS1.p3" class="ltx_para">
+<p class="ltx_p">It’s important to note that some of these comparisons make additional assumptions compared to MEDAL:</p>
+<ul id="S5.I1" class="ltx_itemize">
+<li id="S5.I1.i1" class="ltx_item" style="list-style-type:none;">
+<span class="ltx_tag ltx_tag_item">•</span> 
+<div id="S5.I1.i1.p1" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">oracle RL</span> operates in the episodic setting, that is the environment is reset to a state from the initial state distribution every few hundred steps. The baseline is included as a reference to compare performance of baselines in ARL versus the conventional episodic setting. It also enables us to compare the performance of conventional RL algorithms when moving from the episodic setting to the ARL setting, by comparing the performance of <span class="ltx_text ltx_font_bold">oracle RL</span> and <span class="ltx_text ltx_font_bold">naïve RL</span>.</p>
+</div>
+</li>
+<li id="S5.I1.i2" class="ltx_item" style="list-style-type:none;">
+<span class="ltx_tag ltx_tag_item">•</span> 
+<div id="S5.I1.i2.p1" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">VaPRL</span> relies on relabeling goals which requires the ability to query the reward function for any arbitrary state and goal (as the VaPRL curriculum can task the agent to reach arbitrary goals from the demonstrations). Additionally, VaPRL has a task specific hyperparameter that controls how quickly the curriculum moves towards the initial state distribution.</p>
+</div>
+</li>
+</ul>
+<p class="ltx_p">In a real-world settings, where the reward function often needs to be learned as well (for example from images), these assumptions can be detrimental to their practical application. While FBRL also requires an additional reward function to reach the initial state distribution, the requirement is not as steep. Additionally, we consider a version of FBRL that learns this reward function in Section <a href="#S5.SS3" title="5.3 The Choice of State Distribution ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5.3</span></a>. However, the ability to query the reward function for arbitrary states and goals, as is required by VaPRL, can be infeasible in practice. The impact of these additional assumptions cannot be overstated, as the primary motivation for the autonomous RL framework is to be representative of real-world RL training.</p>
+</div>
+<div id="S5.SS1.p4" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_bold">Results.</span>
+Table <a href="#S5.T1" title="Table 1 ‣ 5.1 Benchmarking MEDAL on EARL ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">1</span></a> shows the performance of the final forward policy, and Figure <a href="#S5.F4" title="Figure 4 ‣ 5.1 Benchmarking MEDAL on EARL ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">4</span></a> shows the <span class="ltx_text ltx_font_italic">deployed</span> performance of the forward policy versus the training time for different methods.
+MEDAL consistently outputs the best performing final policy, as can be seen in Table <a href="#S5.T1" title="Table 1 ‣ 5.1 Benchmarking MEDAL on EARL ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">1</span></a>. Particularly notable is the performance on <span class="ltx_text ltx_font_italic">sawyer peg insertion</span>, where the final policy learned by MEDAL gets 40% success rate on average, while all other methods fail completely. With the exception of VaPRL on <span class="ltx_text ltx_font_italic">tabletop organization</span>, MEDAL also learns more efficiently compared to any of the prior methods. Notably, MEDAL substantially reduces the sample efficiency gap between ARL methods and episodic methods on <span class="ltx_text ltx_font_italic">sawyer door closing</span>.</p>
+</div>
+<div id="S5.SS1.p5" class="ltx_para">
+<p class="ltx_p">We posit two reasons for the success of MEDAL: (a) Learning a backward policy that retrieves the agent close to the task distribution enables efficient exploration, producing the speedup in performance. (b) Bringing the agent closer to the state distribution implicit in the demonstrations may be easier to maximize compared to other objectives, for example, retrieving the agent to the initial state distribution.</p>
+</div>
+<figure id="S5.F5" class="ltx_figure">
+<div class="ltx_flex_figure">
+
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/oracle_naive_gail_tabletop_transfer.png" id="S5.F5.g1" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="479" height="340" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/oracle_naive_gail_door_transfer.png" id="S5.F5.g2" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="479" height="340" alt="Refer to caption"></div>
+</div>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 5: </span><span class="ltx_text ltx_font_bold">MEDAL</span> in comparison to imitation learning methods on <span class="ltx_text ltx_font_italic">tabletop organization</span> and <span class="ltx_text ltx_font_italic">sawyer door closing</span>. Behavior cloning (<span class="ltx_text ltx_font_bold">BC</span>) does not fare well, suggesting the importance of online data collection. The success of online imitation learning methods such as GAIL in episodic settings does not translate to the non-episodic ARL setting, as indicated by the substantial drop in performance of <span class="ltx_text ltx_font_bold">naïve GAIL</span> compared to <span class="ltx_text ltx_font_bold">oracle GAIL</span>.</figcaption>
+</figure>
+</section>
+<section id="S5.SS2" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">5.2 </span>Imitation Learning</h3>
+
+<div id="S5.SS2.p1" class="ltx_para">
+<p class="ltx_p">Given that MEDAL assumes access to a set of demonstrations, a natural alternative to consider is imitation learning. In this section, we focus our experiments on the tabletop organization environment. We first test how a behavior cloning fares (<span class="ltx_text ltx_font_bold">BC</span>). Results in Figure <a href="#S5.F5" title="Figure 5 ‣ 5.1 Benchmarking MEDAL on EARL ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5</span></a> suggest that behavior cloning does not do well on <span class="ltx_text ltx_font_italic">tabletop organization</span>, completely failing to solve the task and leaves substantial room for improvement on <span class="ltx_text ltx_font_italic">sawyer door</span>. This is to be expected as EARL provides only a small number of demonstrations, and errors compounding over time from imperfect policies generally leads to poor performance. How do imitation learning methods with online data collection fare? We consider an off-policy version of GAIL, Discriminator Actor-Critic (DAC) <cite class="ltx_cite ltx_citemacro_citep">(Kostrikov et al., <a href="#bib.bib27" title="" class="ltx_ref">2018</a>)</cite>, which matches <math id="S5.SS2.p1.m1" class="ltx_Math" alttext="\rho^{\pi}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mi>π</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> to <math id="S5.SS2.p1.m2" class="ltx_Math" alttext="\rho^{*}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> with an implicit distribution matching approach similar to ours. Assuming that <math id="S5.SS2.p1.m3" class="ltx_Math" alttext="\rho^{\pi}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mi>π</mi></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math> can match <math id="S5.SS2.p1.m4" class="ltx_Math" alttext="\rho^{*}(s,a)" display="inline"><mrow><msup><mi>ρ</mi><mo>*</mo></msup><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow></math>, the method should in principle recover the optimal policy – there is nothing specific about GAIL that restricts it to the episodic setting. However, as the results in Figure <a href="#S5.F5" title="Figure 5 ‣ 5.1 Benchmarking MEDAL on EARL ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">5</span></a> suggest, there is a substantial drop in performance when running GAIL in episodic setting (<span class="ltx_text ltx_font_bold">oracle GAIL</span>) versus the non-episodic ARL setting (<span class="ltx_text ltx_font_bold">naïve GAIL</span>). While such a distribution matching could succeed, naïvely extending the methods to the ARL setting is not as successful, suggesting that it may require an additional policy (similar to the backward policy) to be more effective.</p>
+</div>
+</section>
+<section id="S5.SS3" class="ltx_subsection">
+<h3 class="ltx_title ltx_title_subsection">
+<span class="ltx_tag ltx_tag_subsection">5.3 </span>The Choice of State Distribution</h3>
+
+<div id="S5.SS3.p1" class="ltx_para">
+<p class="ltx_p">The key element in MEDAL is matching the state distribution of the backward policy to the states in the demonstrations. To isolate the role of our proposed scheme of minimizing <math id="S5.SS3.p1.m1" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{b}\mid\mid\rho^{*})" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>b</mi></msup><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msup><mi>ρ</mi><mo>*</mo></msup><mo stretchy="false">)</mo></mrow></mrow></math>, we compare it to an alternate method that minimizes <math id="S5.SS3.p1.m2" class="ltx_math_unparsed" alttext="\mathcal{D}_{\textrm{JS}}(\rho^{b}\mid\mid\rho_{0})" display="inline"><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mtext>JS</mtext></msub><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mi>b</mi></msup><mo lspace="0em" rspace="0.0835em">∣</mo><mo lspace="0.0835em" rspace="0.167em">∣</mo><msub><mi>ρ</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow></math>, i.e., matching the initial state distribution <math id="S5.SS3.p1.m3" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math> instead of <math id="S5.SS3.p1.m4" class="ltx_Math" alttext="\rho^{*}" display="inline"><msup><mi>ρ</mi><mo>*</mo></msup></math>. This makes exactly one change to MEDAL: instead of sampling positives for the discriminator <math id="S5.SS3.p1.m5" class="ltx_Math" alttext="C(s)" display="inline"><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></math> from forward demonstrations <math id="S5.SS3.p1.m6" class="ltx_Math" alttext="\mathcal{D}_{f}" display="inline"><msub><mi class="ltx_font_mathcaligraphic">𝒟</mi><mi>f</mi></msub></math>, the positives are sampled from <math id="S5.SS3.p1.m7" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math>. Interestingly, this also provides a practically realizable implementation of <span class="ltx_text ltx_font_bold">FBRL</span>, as it removes the requirement of the additional reward function required for the learning a backward policy to reach the initial state distribution.
+We call this method <span class="ltx_text ltx_font_bold">FBRL + VICE</span> as VICE <cite class="ltx_cite ltx_citemacro_citep">(Singh et al., <a href="#bib.bib40" title="" class="ltx_ref">2019</a>)</cite> enables learning a goal reaching reward function using a few samples of the goal distribution, in this case the goal distribution for <math id="S5.SS3.p1.m8" class="ltx_Math" alttext="\pi_{b}" display="inline"><msub><mi>π</mi><mi>b</mi></msub></math> being <math id="S5.SS3.p1.m9" class="ltx_Math" alttext="\rho_{0}" display="inline"><msub><mi>ρ</mi><mn>0</mn></msub></math>. As can be seen in Figure <a href="#S5.F6" title="Figure 6 ‣ 5.3 The Choice of State Distribution ‣ 5 Experiments ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">6</span></a>, the FBRL + VICE learns slower than MEDAL, highlighting the importance of matching the entire state distribution as done in MEDAL.</p>
+</div>
+<figure id="S5.F6" class="ltx_figure">
+<div class="ltx_flex_figure">
+
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/fbrl_vice_tabletop_transfer.png" id="S5.F6.g1" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="479" height="340" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/fbrl_vice_door_transfer.png" id="S5.F6.g2" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="479" height="340" alt="Refer to caption"></div>
+</div>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 6: </span>Isolating the effect of matching demonstration data. The speed up of <span class="ltx_text ltx_font_bold">MEDAL</span> compared to <span class="ltx_text ltx_font_bold">FBRL + VICE</span>, which matches the initial state distribution, suggests that the performance gains of MEDAL can be attributed to the better initial state distribution created by the backward controller.</figcaption>
+</figure>
+</section>
+</section>
+<section id="S6" class="ltx_section">
+<h2 class="ltx_title ltx_title_section">
+<span class="ltx_tag ltx_tag_section">6 </span>Conclusion</h2>
+
+<div id="S6.p1" class="ltx_para">
+<p class="ltx_p">We propose MEDAL, an autonomous RL algorithm that learns a backward policy to match the expert state distribution using an implicit distribution matching approach. Our empirical analysis indicates that this approach creates an effective initial state distribution for the forward policy, improving both the performance and the efficiency. The simplicity of MEDAL also makes it more amenable for the real-world, not requiring access to additional reward functions.</p>
+</div>
+<div id="S6.p2" class="ltx_para">
+<p class="ltx_p">MEDAL assumes access to a (small) set of demonstrations, which may not be feasible in several real-world scenarios. Identifying good initial state distributions without relying on a set of demonstrations would increase the applicability of MEDAL. Similarly, in applications where safe exploration is a requirement, MEDAL can be adapted to constrain the forward policy such that it stays close to the task-distribution defined by the demonstrations. While MEDAL pushes further the improvements in ARL, as exemplified by the reduction of sample efficiency gap on <span class="ltx_text ltx_font_italic">sawyer door closing</span> results, there is still a substantial gap in performance between ARL methods and oracle RL on <span class="ltx_text ltx_font_italic">sawyer peg</span>, motivating the search for better methods.</p>
+</div>
+</section>
+<section id="bib" class="ltx_bibliography">
+<h2 class="ltx_title ltx_title_bibliography">References</h2>
+
+<ul class="ltx_biblist">
+<li id="bib.bib1" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Andrychowicz et al. (2017)</span>
+<span class="ltx_bibblock">
+Andrychowicz, M., Wolski, F., Ray, A., Schneider, J., Fong, R., Welinder, P.,
+McGrew, B., Tobin, J., Abbeel, P., and Zaremba, W.
+
+</span>
+<span class="ltx_bibblock">Hindsight experience replay.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1707.01495</em>, 2017.
+
+</span>
+</li>
+<li id="bib.bib2" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Argall et al. (2009)</span>
+<span class="ltx_bibblock">
+Argall, B. D., Chernova, S., Veloso, M., and Browning, B.
+
+</span>
+<span class="ltx_bibblock">A survey of robot learning from demonstration.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Robotics and autonomous systems</em>, 57(5):469–483, 2009.
+
+</span>
+</li>
+<li id="bib.bib3" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Baram et al. (2017)</span>
+<span class="ltx_bibblock">
+Baram, N., Anschel, O., Caspi, I., and Mannor, S.
+
+</span>
+<span class="ltx_bibblock">End-to-end differentiable adversarial imitation learning.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International Conference on Machine Learning</em>, pp. 390–399. PMLR, 2017.
+
+</span>
+</li>
+<li id="bib.bib4" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Bloesch et al. (2022)</span>
+<span class="ltx_bibblock">
+Bloesch, M., Humplik, J., Patraucean, V., Hafner, R., Haarnoja, T., Byravan,
+A., Siegel, N. Y., Tunyasuvunakool, S., Casarini, F., Batchelor, N., et al.
+
+</span>
+<span class="ltx_bibblock">Towards real robot learning in the wild: A case study in bipedal
+locomotion.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Conference on Robot Learning</em>, pp.  1502–1511. PMLR, 2022.
+
+</span>
+</li>
+<li id="bib.bib5" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Brys et al. (2015)</span>
+<span class="ltx_bibblock">
+Brys, T., Harutyunyan, A., Suay, H. B., Chernova, S., Taylor, M. E., and
+Nowé, A.
+
+</span>
+<span class="ltx_bibblock">Reinforcement learning from demonstration through shaping.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Twenty-fourth international joint conference on artificial
+intelligence</em>, 2015.
+
+</span>
+</li>
+<li id="bib.bib6" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Burda et al. (2018)</span>
+<span class="ltx_bibblock">
+Burda, Y., Edwards, H., Storkey, A., and Klimov, O.
+
+</span>
+<span class="ltx_bibblock">Exploration by random network distillation.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1810.12894</em>, 2018.
+
+</span>
+</li>
+<li id="bib.bib7" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Campos et al. (2020)</span>
+<span class="ltx_bibblock">
+Campos, V., Trott, A., Xiong, C., Socher, R., Giró-i Nieto, X., and Torres,
+J.
+
+</span>
+<span class="ltx_bibblock">Explore, discover and learn: Unsupervised discovery of state-covering
+skills.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International Conference on Machine Learning</em>, pp. 1317–1327. PMLR, 2020.
+
+</span>
+</li>
+<li id="bib.bib8" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Chatzilygeroudis et al. (2018)</span>
+<span class="ltx_bibblock">
+Chatzilygeroudis, K., Vassiliades, V., and Mouret, J.-B.
+
+</span>
+<span class="ltx_bibblock">Reset-free trial-and-error learning for robot damage recovery.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Robotics and Autonomous Systems</em>, 100:236–250, 2018.
+
+</span>
+</li>
+<li id="bib.bib9" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Co-Reyes et al. (2020)</span>
+<span class="ltx_bibblock">
+Co-Reyes, J. D., Sanjeev, S., Berseth, G., Gupta, A., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Ecological reinforcement learning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2006.12478</em>, 2020.
+
+</span>
+</li>
+<li id="bib.bib10" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Even-Dar et al. (2005)</span>
+<span class="ltx_bibblock">
+Even-Dar, E., Kakade, S. M., and Mansour, Y.
+
+</span>
+<span class="ltx_bibblock">Reinforcement learning in pomdps without resets.
+
+</span>
+<span class="ltx_bibblock">2005.
+
+</span>
+</li>
+<li id="bib.bib11" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Eysenbach et al. (2017)</span>
+<span class="ltx_bibblock">
+Eysenbach, B., Gu, S., Ibarz, J., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Leave no trace: Learning to reset for safe and autonomous
+reinforcement learning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1711.06782</em>, 2017.
+
+</span>
+</li>
+<li id="bib.bib12" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Eysenbach et al. (2018)</span>
+<span class="ltx_bibblock">
+Eysenbach, B., Gupta, A., Ibarz, J., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Diversity is all you need: Learning skills without a reward function.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1802.06070</em>, 2018.
+
+</span>
+</li>
+<li id="bib.bib13" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Finn et al. (2016)</span>
+<span class="ltx_bibblock">
+Finn, C., Levine, S., and Abbeel, P.
+
+</span>
+<span class="ltx_bibblock">Guided cost learning: Deep inverse optimal control via policy
+optimization.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International conference on machine learning</em>, pp.  49–58.
+PMLR, 2016.
+
+</span>
+</li>
+<li id="bib.bib14" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Fu et al. (2018)</span>
+<span class="ltx_bibblock">
+Fu, J., Singh, A., Ghosh, D., Yang, L., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Variational inverse control with events: A general framework for
+data-driven reward definition.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1805.11686</em>, 2018.
+
+</span>
+</li>
+<li id="bib.bib15" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ghasemipour et al. (2020)</span>
+<span class="ltx_bibblock">
+Ghasemipour, S. K. S., Zemel, R., and Gu, S.
+
+</span>
+<span class="ltx_bibblock">A divergence minimization perspective on imitation learning methods.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Conference on Robot Learning</em>, pp.  1259–1277. PMLR, 2020.
+
+</span>
+</li>
+<li id="bib.bib16" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Goodfellow (2016)</span>
+<span class="ltx_bibblock">
+Goodfellow, I.
+
+</span>
+<span class="ltx_bibblock">Nips 2016 tutorial: Generative adversarial networks.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1701.00160</em>, 2016.
+
+</span>
+</li>
+<li id="bib.bib17" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Goodfellow et al. (2014)</span>
+<span class="ltx_bibblock">
+Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair,
+S., Courville, A., and Bengio, Y.
+
+</span>
+<span class="ltx_bibblock">Generative adversarial nets.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Advances in neural information processing systems</em>, 27, 2014.
+
+</span>
+</li>
+<li id="bib.bib18" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Gregor et al. (2016)</span>
+<span class="ltx_bibblock">
+Gregor, K., Rezende, D. J., and Wierstra, D.
+
+</span>
+<span class="ltx_bibblock">Variational intrinsic control.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1611.07507</em>, 2016.
+
+</span>
+</li>
+<li id="bib.bib19" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Gupta et al. (2021)</span>
+<span class="ltx_bibblock">
+Gupta, A., Yu, J., Zhao, T. Z., Kumar, V., Rovinsky, A., Xu, K., Devlin, T.,
+and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Reset-free reinforcement learning via multi-task learning: Learning
+dexterous manipulation behaviors without human intervention.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2104.11203</em>, 2021.
+
+</span>
+</li>
+<li id="bib.bib20" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ha et al. (2020)</span>
+<span class="ltx_bibblock">
+Ha, S., Xu, P., Tan, Z., Levine, S., and Tan, J.
+
+</span>
+<span class="ltx_bibblock">Learning to walk in the real world with minimal human effort.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2002.08550</em>, 2020.
+
+</span>
+</li>
+<li id="bib.bib21" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Haarnoja et al. (2018)</span>
+<span class="ltx_bibblock">
+Haarnoja, T., Zhou, A., Abbeel, P., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Soft actor-critic: Off-policy maximum entropy deep reinforcement
+learning with a stochastic actor.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International conference on machine learning</em>, pp. 1861–1870. PMLR, 2018.
+
+</span>
+</li>
+<li id="bib.bib22" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Han et al. (2015)</span>
+<span class="ltx_bibblock">
+Han, W., Levine, S., and Abbeel, P.
+
+</span>
+<span class="ltx_bibblock">Learning compound multi-step controllers under unknown dynamics.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">2015 IEEE/RSJ International Conference on Intelligent Robots
+and Systems (IROS)</em>, pp.  6435–6442. IEEE, 2015.
+
+</span>
+</li>
+<li id="bib.bib23" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Hazan et al. (2019)</span>
+<span class="ltx_bibblock">
+Hazan, E., Kakade, S., Singh, K., and Van Soest, A.
+
+</span>
+<span class="ltx_bibblock">Provably efficient maximum entropy exploration.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International Conference on Machine Learning</em>, pp. 2681–2691. PMLR, 2019.
+
+</span>
+</li>
+<li id="bib.bib24" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Hester et al. (2018)</span>
+<span class="ltx_bibblock">
+Hester, T., Vecerik, M., Pietquin, O., Lanctot, M., Schaul, T., Piot, B.,
+Horgan, D., Quan, J., Sendonaris, A., Osband, I., et al.
+
+</span>
+<span class="ltx_bibblock">Deep q-learning from demonstrations.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Proceedings of the AAAI Conference on Artificial
+Intelligence</em>, volume 32, 2018.
+
+</span>
+</li>
+<li id="bib.bib25" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ho &amp; Ermon (2016)</span>
+<span class="ltx_bibblock">
+Ho, J. and Ermon, S.
+
+</span>
+<span class="ltx_bibblock">Generative adversarial imitation learning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Advances in neural information processing systems</em>,
+29:4565–4573, 2016.
+
+</span>
+</li>
+<li id="bib.bib26" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Kakade &amp; Langford (2002)</span>
+<span class="ltx_bibblock">
+Kakade, S. and Langford, J.
+
+</span>
+<span class="ltx_bibblock">Approximately optimal approximate reinforcement learning.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">In Proc. 19th International Conference on Machine Learning</em>.
+Citeseer, 2002.
+
+</span>
+</li>
+<li id="bib.bib27" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Kostrikov et al. (2018)</span>
+<span class="ltx_bibblock">
+Kostrikov, I., Agrawal, K. K., Dwibedi, D., Levine, S., and Tompson, J.
+
+</span>
+<span class="ltx_bibblock">Discriminator-actor-critic: Addressing sample inefficiency and reward
+bias in adversarial imitation learning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1809.02925</em>, 2018.
+
+</span>
+</li>
+<li id="bib.bib28" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Lee et al. (2019)</span>
+<span class="ltx_bibblock">
+Lee, L., Eysenbach, B., Parisotto, E., Xing, E., Levine, S., and Salakhutdinov,
+R.
+
+</span>
+<span class="ltx_bibblock">Efficient exploration via state marginal matching.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1906.05274</em>, 2019.
+
+</span>
+</li>
+<li id="bib.bib29" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Lu et al. (2020)</span>
+<span class="ltx_bibblock">
+Lu, K., Grover, A., Abbeel, P., and Mordatch, I.
+
+</span>
+<span class="ltx_bibblock">Reset-free lifelong learning with skill-space planning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2012.03548</em>, 2020.
+
+</span>
+</li>
+<li id="bib.bib30" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Mnih et al. (2015)</span>
+<span class="ltx_bibblock">
+Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare,
+M. G., Graves, A., Riedmiller, M., Fidjeland, A. K., Ostrovski, G., et al.
+
+</span>
+<span class="ltx_bibblock">Human-level control through deep reinforcement learning.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">nature</em>, 518(7540):529–533, 2015.
+
+</span>
+</li>
+<li id="bib.bib31" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Nair et al. (2018)</span>
+<span class="ltx_bibblock">
+Nair, A., McGrew, B., Andrychowicz, M., Zaremba, W., and Abbeel, P.
+
+</span>
+<span class="ltx_bibblock">Overcoming exploration in reinforcement learning with demonstrations.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">2018 IEEE international conference on robotics and
+automation (ICRA)</em>, pp.  6292–6299. IEEE, 2018.
+
+</span>
+</li>
+<li id="bib.bib32" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ng et al. (2000)</span>
+<span class="ltx_bibblock">
+Ng, A. Y., Russell, S. J., et al.
+
+</span>
+<span class="ltx_bibblock">Algorithms for inverse reinforcement learning.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Icml</em>, volume 1, pp.  2, 2000.
+
+</span>
+</li>
+<li id="bib.bib33" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Nowozin et al. (2016)</span>
+<span class="ltx_bibblock">
+Nowozin, S., Cseke, B., and Tomioka, R.
+
+</span>
+<span class="ltx_bibblock">f-gan: Training generative neural samplers using variational
+divergence minimization.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Proceedings of the 30th International Conference on Neural
+Information Processing Systems</em>, pp.  271–279, 2016.
+
+</span>
+</li>
+<li id="bib.bib34" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Rafailov et al. (2021)</span>
+<span class="ltx_bibblock">
+Rafailov, R., Yu, T., Rajeswaran, A., and Finn, C.
+
+</span>
+<span class="ltx_bibblock">Visual adversarial imitation learning using variational models.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Advances in Neural Information Processing Systems</em>, 34, 2021.
+
+</span>
+</li>
+<li id="bib.bib35" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Rajeswaran et al. (2017)</span>
+<span class="ltx_bibblock">
+Rajeswaran, A., Kumar, V., Gupta, A., Vezzani, G., Schulman, J., Todorov, E.,
+and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Learning complex dexterous manipulation with deep reinforcement
+learning and demonstrations.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1709.10087</em>, 2017.
+
+</span>
+</li>
+<li id="bib.bib36" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Rivest &amp; Schapire (1993)</span>
+<span class="ltx_bibblock">
+Rivest, R. L. and Schapire, R. E.
+
+</span>
+<span class="ltx_bibblock">Inference of finite automata using homing sequences.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Information and Computation</em>, 103(2):299–347, 1993.
+
+</span>
+</li>
+<li id="bib.bib37" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Sharma et al. (2019)</span>
+<span class="ltx_bibblock">
+Sharma, A., Gu, S., Levine, S., Kumar, V., and Hausman, K.
+
+</span>
+<span class="ltx_bibblock">Dynamics-aware unsupervised discovery of skills.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1907.01657</em>, 2019.
+
+</span>
+</li>
+<li id="bib.bib38" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Sharma et al. (2021)</span>
+<span class="ltx_bibblock">
+Sharma, A., Gupta, A., Levine, S., Hausman, K., and Finn, C.
+
+</span>
+<span class="ltx_bibblock">Autonomous reinforcement learning via subgoal curricula.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">Advances in Neural Information Processing Systems</em>, 34, 2021.
+
+</span>
+</li>
+<li id="bib.bib39" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Sharma et al. (2022)</span>
+<span class="ltx_bibblock">
+Sharma, A., Xu, K., Sardana, N., Gupta, A., Hausman, K., Levine, S., and Finn,
+C.
+
+</span>
+<span class="ltx_bibblock">Autonomous reinforcement learning: Formalism and benchmarking.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">International Conference on Learning Representations</em>, 2022.
+
+</span>
+</li>
+<li id="bib.bib40" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Singh et al. (2019)</span>
+<span class="ltx_bibblock">
+Singh, A., Yang, L., Hartikainen, K., Finn, C., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">End-to-end robotic reinforcement learning without reward engineering.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1904.07854</em>, 2019.
+
+</span>
+</li>
+<li id="bib.bib41" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Smith et al. (2021)</span>
+<span class="ltx_bibblock">
+Smith, L., Kew, J. C., Peng, X. B., Ha, S., Tan, J., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Legged robots that keep on learning: Fine-tuning locomotion policies
+in the real world.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2110.05457</em>, 2021.
+
+</span>
+</li>
+<li id="bib.bib42" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Torabi et al. (2019)</span>
+<span class="ltx_bibblock">
+Torabi, F., Warnell, G., and Stone, P.
+
+</span>
+<span class="ltx_bibblock">Adversarial imitation learning from state-only demonstrations.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Proceedings of the 18th International Conference on
+Autonomous Agents and MultiAgent Systems</em>, pp.  2229–2231, 2019.
+
+</span>
+</li>
+<li id="bib.bib43" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Vecerik et al. (2017)</span>
+<span class="ltx_bibblock">
+Vecerik, M., Hester, T., Scholz, J., Wang, F., Pietquin, O., Piot, B., Heess,
+N., Rothörl, T., Lampe, T., and Riedmiller, M.
+
+</span>
+<span class="ltx_bibblock">Leveraging demonstrations for deep reinforcement learning on robotics
+problems with sparse rewards.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1707.08817</em>, 2017.
+
+</span>
+</li>
+<li id="bib.bib44" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Xu et al. (2020)</span>
+<span class="ltx_bibblock">
+Xu, K., Verma, S., Finn, C., and Levine, S.
+
+</span>
+<span class="ltx_bibblock">Continual learning of control primitives: Skill discovery via
+reset-games.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:2011.05286</em>, 2020.
+
+</span>
+</li>
+<li id="bib.bib45" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Zhang et al. (2017)</span>
+<span class="ltx_bibblock">
+Zhang, H., Cisse, M., Dauphin, Y. N., and Lopez-Paz, D.
+
+</span>
+<span class="ltx_bibblock">mixup: Beyond empirical risk minimization.
+
+</span>
+<span class="ltx_bibblock"><em class="ltx_emph ltx_font_italic">arXiv preprint arXiv:1710.09412</em>, 2017.
+
+</span>
+</li>
+<li id="bib.bib46" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Zhu et al. (2020a)</span>
+<span class="ltx_bibblock">
+Zhu, H., Yu, J., Gupta, A., Shah, D., Hartikainen, K., Singh, A., Kumar, V.,
+and Levine, S.
+
+</span>
+<span class="ltx_bibblock">The ingredients of real world robotic reinforcement learning.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">International Conference on Learning Representations</em>,
+2020a.
+
+</span>
+</li>
+<li id="bib.bib47" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Zhu et al. (2020b)</span>
+<span class="ltx_bibblock">
+Zhu, Z., Lin, K., Dai, B., and Zhou, J.
+
+</span>
+<span class="ltx_bibblock">Off-policy imitation learning from observations.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">the Thirty-fourth Annual Conference on Neural Information
+Processing Systems (NeurIPS 2020)</em>, 2020b.
+
+</span>
+</li>
+<li id="bib.bib48" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ziebart et al. (2008)</span>
+<span class="ltx_bibblock">
+Ziebart, B. D., Maas, A. L., Bagnell, J. A., Dey, A. K., et al.
+
+</span>
+<span class="ltx_bibblock">Maximum entropy inverse reinforcement learning.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">Aaai</em>, volume 8, pp.  1433–1438. Chicago, IL, USA, 2008.
+
+</span>
+</li>
+<li id="bib.bib49" class="ltx_bibitem">
+<span class="ltx_tag ltx_role_refnum ltx_tag_bibitem">Ziebart et al. (2010)</span>
+<span class="ltx_bibblock">
+Ziebart, B. D., Bagnell, J. A., and Dey, A. K.
+
+</span>
+<span class="ltx_bibblock">Modeling interaction via the principle of maximum causal entropy.
+
+</span>
+<span class="ltx_bibblock">In <em class="ltx_emph ltx_font_italic">ICML</em>, 2010.
+
+</span>
+</li>
+</ul>
+</section>
+<div class="ltx_pagination ltx_role_newpage"></div>
+<section id="A1" class="ltx_appendix">
+<h2 class="ltx_title ltx_title_appendix">
+<span class="ltx_tag ltx_tag_appendix">Appendix A </span>MEDAL Implementation</h2>
+
+<div id="A1.p1" class="ltx_para">
+<p class="ltx_p">MEDAL is implemented with TF-Agents, built on SAC as the base RL algorithm. Hyperparameters follow the default values: <span class="ltx_text ltx_font_typewriter">initial collect steps</span>: 10,000, <span class="ltx_text ltx_font_typewriter">batch size</span> sampled from replay buffer for updating policy and critic: 256, steps <span class="ltx_text ltx_font_typewriter">collected per iteration</span>: 1, <span class="ltx_text ltx_font_typewriter">trained per iteration</span>: 1, <span class="ltx_text ltx_font_typewriter">discount factor</span>: 0.99, <span class="ltx_text ltx_font_typewriter">learning rate</span>: <math id="A1.p1.m1" class="ltx_Math" alttext="3e-4" display="inline"><mrow><mrow><mn>3</mn><mo>⁢</mo><mi>e</mi></mrow><mo>−</mo><mn>4</mn></mrow></math> (for critics, actors, and discriminator). The actor and critic network were parameterized as neural networks with two hidden layers each of size <math id="A1.p1.m2" class="ltx_Math" alttext="256" display="inline"><mn>256</mn></math>. For the discriminator, it was parameterized as a neural network with one hidden layer of size <math id="A1.p1.m3" class="ltx_Math" alttext="128" display="inline"><mn>128</mn></math>. This discriminator is updated once every 10 collection steps for all environments. Due to a small positive dataset, mixup <cite class="ltx_cite ltx_citemacro_citep">(Zhang et al., <a href="#bib.bib45" title="" class="ltx_ref">2017</a>)</cite> is used as a regularization technique on the discriminator for all environments. Additionally, the batch size for the discriminator is set to <math id="A1.p1.m4" class="ltx_Math" alttext="800" display="inline"><mn>800</mn></math> for all environments as this significantly larger value was found to stabilize training.</p>
+</div>
+<div id="A1.p2" class="ltx_para">
+<p class="ltx_p">Another choice that improved the stability was the choice of reward function for the backward controller: both <math id="A1.p2.m1" class="ltx_Math" alttext="r(s,a)=-\log(1-C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></math> and <math id="A1.p2.m2" class="ltx_Math" alttext="r(s,a)=\log(C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></math> preserve the saddle point <math id="A1.p2.m3" class="ltx_Math" alttext="(\rho^{*},0.5)" display="inline"><mrow><mo stretchy="false">(</mo><msup><mi>ρ</mi><mo>*</mo></msup><mo>,</mo><mn>0.5</mn><mo stretchy="false">)</mo></mrow></math> for the optimization in Equation <a href="#S4.E3" title="3 ‣ 4.2 Resetting to Match the Expert State Distribution ‣ 4 Matching Expert Distributions for Autonomous Learning (MEDAL) ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">3</span></a>. However, as can be seen in Figure <a href="#A1.F7" title="Figure 7 ‣ Appendix A MEDAL Implementation ‣ A State-Distribution Matching Approach to Non-Episodic Reinforcement Learning" class="ltx_ref"><span class="ltx_text ltx_ref_tag">7</span></a>, <math id="A1.p2.m4" class="ltx_Math" alttext="r(s,a)=-\log(1-C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></math> leads to both better and stable performance. We hypothesize that this is due to smaller gradients of the <math id="A1.p2.m5" class="ltx_Math" alttext="-\log(1-C(s))" display="inline"><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></math> when <math id="A1.p2.m6" class="ltx_Math" alttext="C(s)\leq 0.5" display="inline"><mrow><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow><mo>≤</mo><mn>0.5</mn></mrow></math>, which is where the discriminator is expected to be for most of the training as the discriminator can easily distinguish between expert states and those of the backward policy to begin with.</p>
+</div>
+<figure id="A1.F7" class="ltx_figure">
+<div class="ltx_flex_figure">
+
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/tabletop_compare_transfer.png" id="A1.F7.g1" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_landscape" width="192" height="148" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/door_compare_transfer.png" id="A1.F7.g2" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_square" width="180" height="146" alt="Refer to caption"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_3"><img src="figures/peg_compare_transfer.png" id="A1.F7.g3" class="ltx_graphics ltx_centering ltx_flex_size_3 ltx_img_square" width="180" height="146" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+<div class="ltx_flex_cell 
+                  ltx_flex_size_1"><img src="figures/legend2.png" id="A1.F7.g4" class="ltx_graphics ltx_centering ltx_flex_size_1 ltx_img_landscape" width="240" height="16" alt="Refer to caption"></div>
+<div class="ltx_flex_break"></div>
+</div>
+<figcaption class="ltx_caption ltx_centering"><span class="ltx_tag ltx_tag_figure">Figure 7: </span>Performance comparison of <math id="A1.F7.m3" class="ltx_Math" alttext="r(s,a)=\log(C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></math> and <math id="A1.F7.m4" class="ltx_Math" alttext="r(s,a)=-\log(1-C(s))" display="inline"><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>C</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></math> on (<span class="ltx_text ltx_font_italic">left</span>) the <span class="ltx_text ltx_font_italic">table-top organization</span> environment, (<span class="ltx_text ltx_font_italic">center</span>) the <span class="ltx_text ltx_font_italic">sawyer door closing</span> environment, and (<span class="ltx_text ltx_font_italic">right</span>) the <span class="ltx_text ltx_font_italic">sawyer peg</span> environment. Plots show learning curves with mean and standard error over 5 random seeds.</figcaption>
+</figure>
+</section>
+<section id="A2" class="ltx_appendix">
+<h2 class="ltx_title ltx_title_appendix">
+<span class="ltx_tag ltx_tag_appendix">Appendix B </span>Environments</h2>
+
+<div id="A2.p1" class="ltx_para">
+<p class="ltx_p">The environment details can be found in <cite class="ltx_cite ltx_citemacro_citep">(Sharma et al., <a href="#bib.bib39" title="" class="ltx_ref">2022</a>)</cite>. We briefly describe environments for completeness. For every environment, <math id="A2.p1.m1" class="ltx_Math" alttext="H_{T}" display="inline"><msub><mi>H</mi><mi>T</mi></msub></math> defines the number of steps after which the environment is reset to a state <math id="A2.p1.m2" class="ltx_Math" alttext="s_{0}\sim\rho_{0}" display="inline"><mrow><msub><mi>s</mi><mn>0</mn></msub><mo>∼</mo><msub><mi>ρ</mi><mn>0</mn></msub></mrow></math>, and <math id="A2.p1.m3" class="ltx_Math" alttext="H_{E}" display="inline"><msub><mi>H</mi><mi>E</mi></msub></math> defines the evaluation horizon over which the return is computed for deployed policy evaluation: 
+<br class="ltx_break"><span class="ltx_text ltx_font_typewriter">table-top organization</span>:
+Table-top organization is run with a training horizon of <math id="A2.p1.m4" class="ltx_Math" alttext="H_{T}=200,000" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><mrow><mn>200</mn><mo>,</mo><mn>000</mn></mrow></mrow></math> and <math id="A2.p1.m5" class="ltx_Math" alttext="H_{E}=200" display="inline"><mrow><msub><mi>H</mi><mi>E</mi></msub><mo>=</mo><mn>200</mn></mrow></math>. The sparse reward function is given by:</p>
+<table id="A2.Ex1" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="A2.Ex1.m1" class="ltx_Math" alttext="r(s,g)=\mathbb{I}(\lVert s-g\rVert_{2}\leq 0.2)," display="block"><mrow><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>g</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝕀</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mrow><mo fence="true" lspace="0em" rspace="0em">∥</mo><mrow><mi>s</mi><mo>−</mo><mi>g</mi></mrow><mo fence="true" lspace="0em" rspace="0.1389em">∥</mo></mrow><mn>2</mn></msub><mo lspace="0.1389em">≤</mo><mn>0.2</mn></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="A2.p1.m6" class="ltx_Math" alttext="\mathbb{I}" display="inline"><mi>𝕀</mi></math> denotes the indicator function. The environment has <math id="A2.p1.m7" class="ltx_Math" alttext="4" display="inline"><mn>4</mn></math> possible goal locations for the mug, and goal location for the gripper is in the center. EARL provides a total of <math id="A2.p1.m8" class="ltx_Math" alttext="12" display="inline"><mn>12</mn></math> forward demonstrations and <math id="A2.p1.m9" class="ltx_Math" alttext="12" display="inline"><mn>12</mn></math> backward demonstrations (<math id="A2.p1.m10" class="ltx_Math" alttext="3" display="inline"><mn>3</mn></math> per goal).</p>
+</div>
+<div id="A2.p2" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_typewriter">sawyer door closing</span>:
+Sawyer door closing is run with a training horizon of <math id="A2.p2.m1" class="ltx_Math" alttext="H_{T}=200,000" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><mrow><mn>200</mn><mo>,</mo><mn>000</mn></mrow></mrow></math> and an episode horizon of <math id="A2.p2.m2" class="ltx_Math" alttext="H_{E}=300" display="inline"><mrow><msub><mi>H</mi><mi>E</mi></msub><mo>=</mo><mn>300</mn></mrow></math>. The sparse reward function is:</p>
+<table id="A2.Ex2" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="A2.Ex2.m1" class="ltx_Math" alttext="r(s,g)=\mathbb{I}(\lVert s-g\rVert_{2}\leq 0.02)," display="block"><mrow><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>g</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝕀</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mrow><mo fence="true" lspace="0em" rspace="0em">∥</mo><mrow><mi>s</mi><mo>−</mo><mi>g</mi></mrow><mo fence="true" lspace="0em" rspace="0.1389em">∥</mo></mrow><mn>2</mn></msub><mo lspace="0.1389em">≤</mo><mn>0.02</mn></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="A2.p2.m3" class="ltx_Math" alttext="\mathbb{I}" display="inline"><mi>𝕀</mi></math> again denotes the indicator function. The goal for the door and the robot arm is the closed door position. EARL provides <math id="A2.p2.m4" class="ltx_Math" alttext="5" display="inline"><mn>5</mn></math> forward demonstrations and <math id="A2.p2.m5" class="ltx_Math" alttext="5" display="inline"><mn>5</mn></math> backward demonstrations.</p>
+</div>
+<div id="A2.p3" class="ltx_para">
+<p class="ltx_p"><span class="ltx_text ltx_font_typewriter">sawyer peg</span>:
+Sawyer peg is run with a training horizon of <math id="A2.p3.m1" class="ltx_Math" alttext="H_{T}=100,000" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><mrow><mn>100</mn><mo>,</mo><mn>000</mn></mrow></mrow></math> and an episode horizon of <math id="A2.p3.m2" class="ltx_Math" alttext="H_{E}=200" display="inline"><mrow><msub><mi>H</mi><mi>E</mi></msub><mo>=</mo><mn>200</mn></mrow></math>. The sparse reward function is:
+</p>
+<table id="A2.Ex3" class="ltx_equation ltx_eqn_table">
+
+<tbody><tr class="ltx_equation ltx_eqn_row ltx_align_baseline">
+<td class="ltx_eqn_cell ltx_eqn_center_padleft"></td>
+<td class="ltx_eqn_cell ltx_align_center"><math id="A2.Ex3.m1" class="ltx_Math" alttext="r(s,g)=\mathbb{I}(\lVert s-g\rVert_{2}\leq 0.05)," display="block"><mrow><mrow><mrow><mi>r</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo>,</mo><mi>g</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝕀</mi><mo>⁢</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mrow><mo fence="true" lspace="0em" rspace="0em">∥</mo><mrow><mi>s</mi><mo>−</mo><mi>g</mi></mrow><mo fence="true" lspace="0em" rspace="0.1389em">∥</mo></mrow><mn>2</mn></msub><mo lspace="0.1389em">≤</mo><mn>0.05</mn></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math></td>
+<td class="ltx_eqn_cell ltx_eqn_center_padright"></td>
+</tr></tbody>
+</table>
+<p class="ltx_p">where <math id="A2.p3.m3" class="ltx_Math" alttext="\mathbb{I}" display="inline"><mi>𝕀</mi></math> again denotes the indicator function. The goal for the peg is to be placed in the goal slot. EARL provides <math id="A2.p3.m4" class="ltx_Math" alttext="10" display="inline"><mn>10</mn></math> forward demonstrations and <math id="A2.p3.m5" class="ltx_Math" alttext="20" display="inline"><mn>20</mn></math> backward demonstrations.</p>
+</div>
+<div class="ltx_pagination ltx_role_newpage"></div>
+</section>
+</article>
+</div>
+<footer class="ltx_page_footer">
+<div class="ltx_page_logo">Generated  on Tue Dec 26 16:58:24 2023 by <a href="http://dlmf.nist.gov/LaTeXML/" class="ltx_LaTeXML_logo"><span style="letter-spacing:-0.2em; margin-right:0.1em;">L<span style="font-size:70%;position:relative; bottom:2.2pt;">A</span>T<span style="position:relative; bottom:-0.4ex;">E</span></span><span class="ltx_font_smallcaps">xml</span><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAsAAAAOCAYAAAD5YeaVAAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9wKExQZLWTEaOUAAAAddEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIFRoZSBHSU1Q72QlbgAAAdpJREFUKM9tkL+L2nAARz9fPZNCKFapUn8kyI0e4iRHSR1Kb8ng0lJw6FYHFwv2LwhOpcWxTjeUunYqOmqd6hEoRDhtDWdA8ApRYsSUCDHNt5ul13vz4w0vWCgUnnEc975arX6ORqN3VqtVZbfbTQC4uEHANM3jSqXymFI6yWazP2KxWAXAL9zCUa1Wy2tXVxheKA9YNoR8Pt+aTqe4FVVVvz05O6MBhqUIBGk8Hn8HAOVy+T+XLJfLS4ZhTiRJgqIoVBRFIoric47jPnmeB1mW/9rr9ZpSSn3Lsmir1fJZlqWlUonKsvwWwD8ymc/nXwVBeLjf7xEKhdBut9Hr9WgmkyGEkJwsy5eHG5vN5g0AKIoCAEgkEkin0wQAfN9/cXPdheu6P33fBwB4ngcAcByHJpPJl+fn54mD3Gg0NrquXxeLRQAAwzAYj8cwTZPwPH9/sVg8PXweDAauqqr2cDjEer1GJBLBZDJBs9mE4zjwfZ85lAGg2+06hmGgXq+j3+/DsixYlgVN03a9Xu8jgCNCyIegIAgx13Vfd7vdu+FweG8YRkjXdWy329+dTgeSJD3ieZ7RNO0VAXAPwDEAO5VKndi2fWrb9jWl9Esul6PZbDY9Go1OZ7PZ9z/lyuD3OozU2wAAAABJRU5ErkJggg==" alt="[LOGO]"></a>
+</div></footer>
+</div>
+</body>
+</html>
